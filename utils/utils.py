@@ -11,6 +11,15 @@ def default_transition_matrix(G):
     D = np.sum(A, axis=1)
     return A/D
 
+def weighted_transition_matrix(G, q):
+    A = nx.adjacency_matrix(G, weight=None).todense()
+    n = A.shape[0]
+    D = np.sum(A, axis=1)
+    A =( A * (1 - q))/D
+    A = A + q * np.identity(n)
+    return A
+
+
 def get_components(G):
     L = []
     for c in nx.connected_components(G):
@@ -18,10 +27,9 @@ def get_components(G):
     return L
 
 # TO IMPLEMENT
-def get_extremal_stationary_measures(G, fn=default_transition_matrix):
+def get_extremal_stationary_measures(G, transition_mat):
     # Get transition matrix for G
     components = get_components(G)
-    transition_mat = fn(G)
     n = transition_mat.shape[0]
     stationary_measures = []
     for c in components:
@@ -52,18 +60,6 @@ def get_couplings(m1, m2):
 
 if __name__ == '__main__':
     G = nx.Graph()
-    G.add_nodes_from([0, 1, 2, 3])
+    G.add_nodes_from([0, 1, 2])
     G.add_edges_from([(0, 1), (1, 2)])
-    H = nx.Graph()
-    H.add_nodes_from([0, 1, 2, 3])
-    H.add_edges_from([(0, 1), (2, 3)])
-    M_H = default_transition_matrix(H)
-    M_G = default_transition_matrix(G)
-    sm_G = get_extremal_stationary_measures(G)
-    sm_H = get_extremal_stationary_measures(H)
-    print(sm_G)
-    print(sm_H)
-    coupling = get_couplings(sm_G, sm_H)
-    for c in coupling:
-        print("-------")
-        print(c)
+    print(weighted_transition_matrix(G, 0.6))
