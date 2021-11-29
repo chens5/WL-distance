@@ -2,15 +2,6 @@ import networkx as nx
 import numpy as np
 import itertools
 
-# Input: networkx graph, G
-# Output: transition matrix for G, m(x, x') = 1/(deg(x) + 1) for x' \in N(x).
-def default_transition_matrix(G):
-    A = nx.adjacency_matrix(G, weight=None).todense()
-    n = A.shape[0]
-    A = A + np.identity(n)
-    D = np.sum(A, axis=1)
-    return A/D
-
 def weighted_transition_matrix(G, q):
     A = nx.adjacency_matrix(G, weight=None).todense()
     n = A.shape[0]
@@ -19,6 +10,22 @@ def weighted_transition_matrix(G, q):
     A = A + q * np.identity(n)
     return A
 
+def degree_mapping(G1, G2):
+    mapping = {}
+    for node in G1.nodes():
+        deg = G1.degree[node]
+        if deg not in mapping:
+            mapping[deg] = [[node], []]
+        else:
+            mapping[deg][0].append(node)
+
+    for node in G2.nodes():
+        deg = G2.degree[node]
+        if deg not in mapping:
+            mapping[deg] = [[], [node]]
+        else:
+            mapping[deg][1].append(node)
+    return mapping
 
 def get_components(G):
     L = []
