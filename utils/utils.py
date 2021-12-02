@@ -10,6 +10,9 @@ def weighted_transition_matrix(G, q):
     A = A + q * np.identity(n)
     return A
 
+# TODO: implement
+# def injective_mapping1(G1, G2)
+
 def degree_mapping(G1, G2):
     mapping = {}
     for node in G1.nodes():

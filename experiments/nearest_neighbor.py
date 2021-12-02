@@ -11,6 +11,9 @@ import time
 import sys
 sys.path.insert(1, './utils/')
 from distances import wl_lower_bound
+import wwl
+import igraph as ig
+
 
 def compute_dist_train(graph_data, k):
     pairs = []
@@ -21,9 +24,9 @@ def compute_dist_train(graph_data, k):
     for pair in pairs:
         G1 = graph_data[pair[0]]
         G2 = graph_data[pair[1]]
-        dist = wl_lower_bound(G1, G2, k)
-        dist_matrix[pair[0]][pair[1]] = kernel
-        dist_matrix[pair[1]][pair[0]] = kernel
+        dist, cp = wl_lower_bound(G1, G2, k)
+        dist_matrix[pair[0]][pair[1]] = dist
+        dist_matrix[pair[1]][pair[0]] = dist
     return dist_matrix
 
 def compute_dist_test(G_test, G_train, k):
@@ -34,8 +37,8 @@ def compute_dist_test(G_test, G_train, k):
         G1 = G_test[i]
         for j in range(m):
             G2 = G_train[j]
-            dist= wl_lower_bound(G1, G2, k)
-            dist_matrix[i][j] = kernel
+            dist, cp= wl_lower_bound(G1, G2, k)
+            dist_matrix[i][j] = dist
     return dist_matrix
 
 # TO IMPLEMENT
@@ -57,14 +60,31 @@ def knn_mlb_experiments(G, y, k_neigh, k_step):
 
     y_pred = clf.predict(D_test)
 
-    return accuracy_score
+    return accuracy_score(y_test, y_pred)
+
+def knn_wwl(G, y, k_neigh, k_step):
+    # get indices of train set
+    # get indices of test set
+    num_graphs = len(G)
+    train_indices, test_indices, y_train, y_test = train_test_split(np.arange(0, num_graphs), y, test_size = 0.2, random_state=23)
+
+    mat = wwl.pairwise_wasserstein_distances(G)
+    D_train = mat[train_indices][:, train_indices]
+    D_test = mat[test_indices][:, train_indices]
+    clf = KNeighbors(n_neighbors = k_neigh, metric = 'recomputed')
+
+    clf.fit(D_train, y_train)
+
+    y_pred = clf.predict(D_test)
+
+    return accuracy_score(y_test, y_pred)
 
 def experiments(G, y):
     k_neigh = 5
-    steps = [1, 2, 3, 4, 5]
+    steps = [1, 2]
     print("MUTAG dataset results on 5-nearest neighbor")
     for k_step in steps:
-        accuracy = knn_mlb_experiments(G, y, k_neigh, k_steps)
+        accuracy = knn_mlb_experiments(G, y, k_neigh, k_step)
         print("k =", k_step, "accuracy:", accuracy)
 
 if __name__ == "__main__":

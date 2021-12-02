@@ -52,6 +52,7 @@ def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping):
         m1 = cp[0]
         m2 = cp[1]
         W = ot.emd2(m1, m2, cost_matrix)
+        # W = ot.sinkhorn2(m1, m2, cost_matrix)
         if W < dist:
             dist = W
             coupling = (m1, m2)

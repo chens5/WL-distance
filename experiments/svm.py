@@ -1,4 +1,4 @@
-from grakel import GraphKernel, Graph
+from grakel import GraphKernel, Graph, WeisfeilerLehman, VertexHistogram
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
@@ -77,9 +77,9 @@ def run_grakel_svm(kernel, G, y):
 
 def experiments(k, lam):
     #kernels = ["random_walk", "shortest_path", "weisfeiler_lehman_optimal_assignment", "weisfeiler_lehman"]
-    MUTAG = fetch_dataset("MUTAG", as_graphs=True)
+    MUTAG = fetch_dataset("MUTAG")
     G = MUTAG.data
-    nx_G = grakel_to_nx(G)
+    #nx_G = grakel_to_nx(G)
     y = MUTAG.target
     sp_kernel = GraphKernel(kernel="shortest_path")
     print("Running SVC with shortest path")
@@ -89,9 +89,9 @@ def experiments(k, lam):
     print("Done in:", end - start)
 
     print("Running SVC with Weisfeiler-Lehman Kernel")
-    wl_subtree_kernel = GraphKernel(kernel = [{"name": "weisfeiler_lehman", "n_iter": 5}, {"name": "subtree_wl"}])
+    wl_subtree_kernel = WeisfeilerLehman(n_iter=4, base_graph_kernel=VertexHistogram, normalize=True)
     start = time.time()
-    print("Accuracy:", run_grakel_svm(rw_kernel, G, y))
+    print("Accuracy:", run_grakel_svm(wl_subtree_kernel, G, y))
     end = time.time()
     print("Done in:", end - start)
 
