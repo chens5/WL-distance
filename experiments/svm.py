@@ -65,10 +65,10 @@ def run_markov_chain_svm(G, y, k, lam):
 # These graphs G need to be switched to grakel format
 def run_grakel_svm(kernel, G, y):
     G_train, G_test, y_train, y_test = train_test_split(G, y, test_size=0.1, random_state=23)
-    
+
     K_train = kernel.fit_transform(G_train)
     K_test = kernel.transform(G_test)
-    
+
     clf = SVC(kernel='precomputed')
     clf.fit(K_train, y_train)
     y_pred = clf.predict(K_test)
@@ -87,19 +87,19 @@ def experiments(k, lam):
     print("Accuracy:", run_grakel_svm(sp_kernel, G, y))
     end = time.time()
     print("Done in:", end - start)
-    
-    #print("Running SVC with random walk")
-    #rw_kernel = GraphKernel(kernel="random_walk")
-    #start = time.time()
-    #print("Accuracy:", run_grakel_svm(rw_kernel, G, y))
-    #end = time.time()
-    #print("Done in:", end - start)
 
-    print("Running SVC with lower bound kernel")
+    print("Running SVC with Weisfeiler-Lehman Kernel")
+    wl_subtree_kernel = GraphKernel(kernel = [{"name": "weisfeiler_lehman", "n_iter": 5}, {"name": "subtree_wl"}])
     start = time.time()
-    print(run_markov_chain_svm(nx_G, y, k , lam))
+    print("Accuracy:", run_grakel_svm(rw_kernel, G, y))
     end = time.time()
     print("Done in:", end - start)
+
+    # print("Running SVC with lower bound kernel")
+    # start = time.time()
+    # print(run_markov_chain_svm(nx_G, y, k , lam))
+    # end = time.time()
+    # print("Done in:", end - start)
 
     #sp_kernel.fit_transform(G[:5])
     #tg = Graph(G[0])
