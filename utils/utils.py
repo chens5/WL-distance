@@ -10,8 +10,6 @@ def weighted_transition_matrix(G, q):
     A = A + q * np.identity(n)
     return A
 
-# TODO: implement
-# def injective_mapping1(G1, G2)
 
 def degree_mapping(G1, G2):
     mapping = {}
@@ -48,6 +46,9 @@ def get_extremal_stationary_measures(G, transition_mat):
         measures = get_stationary_measures(c_transition)
         for m in measures:
             sm = np.zeros(n)
+            # if np.iscomplexobj(m):
+            # print("COMPLEX MEASURE:", m)
+            # print(nx.adjacency_matrix(G))
             sm[l] = m
             stationary_measures.append(sm)
 

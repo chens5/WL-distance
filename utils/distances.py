@@ -3,6 +3,7 @@ import scipy
 import numpy as np
 import networkx as nx
 import ot
+import time
 
 def calculate_histogram(M, Z, l_inv, ind):
     n = M.shape[0]
@@ -19,8 +20,10 @@ def calculate_cost_matrix(M_1, M_2, l_inv):
     cost_matrix = np.zeros((n, m))
     # Calculating histograms for each vertex
     Z = np.array(list(l_inv.keys()))
-    Z1 = Z / n
-    Z2 = Z / m
+
+    Z1 = (1/Z) + n
+    Z2 = (1/Z) + m
+
     hist1 = calculate_histogram(M_1, Z, l_inv, 0)
     hist2 = calculate_histogram(M_2, Z, l_inv, 1)
     for i in range(n):
@@ -51,8 +54,8 @@ def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping):
     for cp in couplings:
         m1 = cp[0]
         m2 = cp[1]
-        W = ot.emd2(m1, m2, cost_matrix)
-        # W = ot.sinkhorn2(m1, m2, cost_matrix)
+        # W = ot.emd2(m1, m2, cost_matrix)
+        W = ot.sinkhorn2(m1, m2, cost_matrix, 1)[0]
         if W < dist:
             dist = W
             coupling = (m1, m2)
@@ -60,11 +63,14 @@ def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping):
 
 if __name__ == '__main__':
     G = nx.Graph()
-    G.add_nodes_from([0, 1])
-    G.add_edges_from([(0, 1)])
+    G.add_nodes_from([0, 1, 2, 3])
+    G.add_edges_from([(0, 1), (1, 2), (2, 3), (0, 3)])
     H = nx.Graph()
     H.add_nodes_from([0, 1, 2, 3])
-    H.add_edges_from([(0, 1), (2, 3)])
-    dist, cp = wl_lower_bound(G, H, 1)
+    H.add_edges_from([(0, 1), (1, 2), (2, 3), (0, 3), (0, 2), (1, 3)])
+    start = time.time()
+    dist, cp = wl_lower_bound(G, H, 4)
+    end = time.time()
+    print(end - start)
     print(dist)
     print(cp)
