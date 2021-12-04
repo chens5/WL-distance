@@ -13,6 +13,7 @@ sys.path.insert(1, './utils/')
 from distances import wl_lower_bound
 import wwl
 import igraph as ig
+from tqdm import trange, tqdm
 
 
 def compute_dist_train(graph_data, k):
@@ -21,7 +22,7 @@ def compute_dist_train(graph_data, k):
     for pairs_of_indexes in itertools.combinations(range(0, n),  2):
         pairs.append(pairs_of_indexes)
     dist_matrix = np.zeros((n, n))
-    for pair in pairs:
+    for pair in tqdm(pairs):
         G1 = graph_data[pair[0]]
         G2 = graph_data[pair[1]]
         dist, cp = wl_lower_bound(G1, G2, k)
@@ -33,7 +34,7 @@ def compute_dist_test(G_test, G_train, k):
     n = len(G_test)
     m = len(G_train)
     dist_matrix = np.zeros((n, m))
-    for i in range(n):
+    for i in trange(n):
         G1 = G_test[i]
         for j in range(m):
             G2 = G_train[j]
@@ -71,7 +72,7 @@ def knn_wwl(G, y, k_neigh, k_step):
     mat = wwl.pairwise_wasserstein_distances(G)
     D_train = mat[train_indices][:, train_indices]
     D_test = mat[test_indices][:, train_indices]
-    clf = KNeighbors(n_neighbors = k_neigh, metric = 'recomputed')
+    clf = KNeighbors(n_neighbors = k_neigh, metric = 'precomputed')
 
     clf.fit(D_train, y_train)
 
