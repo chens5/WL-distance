@@ -81,7 +81,7 @@ def knn_wwl(G, y, k_neigh, k_step):
 
 def experiments(G, y):
     k_neigh = 5
-    steps = [1, 2]
+    steps = [4]
     print("MUTAG dataset results on 5-nearest neighbor")
     for k_step in steps:
         accuracy = knn_mlb_experiments(G, y, k_neigh, k_step)
