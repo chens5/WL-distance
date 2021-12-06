@@ -59,15 +59,15 @@ def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping):
         if W < dist:
             dist = W
             coupling = (m1, m2)
-    return W, coupling
+    return dist, coupling
 
 if __name__ == '__main__':
     G = nx.Graph()
-    G.add_nodes_from([0, 1, 2, 3])
-    G.add_edges_from([(0, 1), (1, 2), (2, 3), (0, 3)])
+    G.add_nodes_from([0, 1, 2, 3, 4, 5, 6, 7])
+    G.add_edges_from([(0, 1), (1, 2), (2, 3), (0, 3), (4, 5), (5, 6), (6, 7), (7, 4)])
     H = nx.Graph()
-    H.add_nodes_from([0, 1, 2, 3])
-    H.add_edges_from([(0, 1), (1, 2), (2, 3), (0, 3), (0, 2), (1, 3)])
+    H.add_nodes_from([0, 1, 2, 3, 4, 5, 6, 7])
+    H.add_edges_from([(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7), (0, 7)])
     start = time.time()
     dist, cp = wl_lower_bound(G, H, 4)
     end = time.time()

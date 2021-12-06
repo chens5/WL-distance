@@ -6,7 +6,7 @@ def weighted_transition_matrix(G, q):
     A = nx.adjacency_matrix(G, weight=None).todense()
     n = A.shape[0]
     D = np.sum(A, axis=1)
-    A =( A * (1 - q))/D
+    A = (A * (1 - q))/D
     A = A + q * np.identity(n)
     return A
 
