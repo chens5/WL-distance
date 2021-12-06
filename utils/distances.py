@@ -8,9 +8,13 @@ import time
 def calculate_histogram(M, Z, l_inv, ind):
     n = M.shape[0]
     hists = np.zeros((n, len(Z)))
+    len_Z = len(Z)
     for i in range(n):
         m = M[i]
-        for j in range(len(Z)):
+        for j in range(len_Z):
+            # Z[j] = value of Z at index j
+            # l_inv[Z[j]][ind] = nodes mapped to Z[j], nodes are expressed at indices
+            # m[l_inv[Z[j]][ind]] = get measure m_{x[i]}^X(x) of all nodes, x
             hists[i][j] = np.sum(m[l_inv[Z[j]][ind]])
     return hists
 
@@ -32,16 +36,18 @@ def calculate_cost_matrix(M_1, M_2, l_inv):
     return cost_matrix
 
 
-def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping):
+def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping, return_coupling=False):
     #l_inv = {degree:[[g1, ..., gk], [h1, ...., hk]]}
     l_inv = degree_mapping(G, H)
-
+    
     M_G = weighted_transition_matrix(G, q)
     M_H = weighted_transition_matrix(H, q)
 
     # calculate M_G^k and M_H^k
-    expm_G = np.array(np.linalg.matrix_power(M_G, k))
-    expm_H = np.array(np.linalg.matrix_power(M_H, k))
+    
+   # print(type(np.linalg.matrix_power(M_G, k)))
+    expm_G = np.linalg.matrix_power(M_G, k)
+    expm_H = np.linalg.matrix_power(M_H, k)
 
     # calculate stationary measures
     G_measures = get_extremal_stationary_measures(G, M_G)
@@ -59,6 +65,9 @@ def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping):
         if W < dist:
             dist = W
             coupling = (m1, m2)
+    if return_coupling == False:
+        return W
+
     return W, coupling
 
 if __name__ == '__main__':
@@ -69,8 +78,8 @@ if __name__ == '__main__':
     H.add_nodes_from([0, 1, 2, 3])
     H.add_edges_from([(0, 1), (1, 2), (2, 3), (0, 3), (0, 2), (1, 3)])
     start = time.time()
-    dist, cp = wl_lower_bound(G, H, 4)
+    dist, cp = wl_lower_bound(G, H, 2, return_coupling=True)
     end = time.time()
-    print(end - start)
+    print("Computed in time:", end - start)
     print(dist)
     print(cp)

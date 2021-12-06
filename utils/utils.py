@@ -3,7 +3,7 @@ import numpy as np
 import itertools
 
 def weighted_transition_matrix(G, q):
-    A = nx.adjacency_matrix(G, weight=None).todense()
+    A = np.asarray(nx.adjacency_matrix(G, weight=None).todense())
     n = A.shape[0]
     D = np.sum(A, axis=1)
     A =( A * (1 - q))/D
@@ -46,9 +46,6 @@ def get_extremal_stationary_measures(G, transition_mat):
         measures = get_stationary_measures(c_transition)
         for m in measures:
             sm = np.zeros(n)
-            # if np.iscomplexobj(m):
-            # print("COMPLEX MEASURE:", m)
-            # print(nx.adjacency_matrix(G))
             sm[l] = m
             stationary_measures.append(sm)
 
@@ -57,8 +54,9 @@ def get_extremal_stationary_measures(G, transition_mat):
 def get_stationary_measures(M):
     # find basis of subspace of stationary measures
     evals, evecs = np.linalg.eig(M.T)
+    evals = np.real_if_close(evals)
     evecs_1 = evecs[:,np.isclose(evals, 1)]
-    stationary_measures = evecs_1.T
+    stationary_measures = np.real_if_close(evecs_1.T)
 
     sum_row = np.sum(stationary_measures, axis=1)
     stationary_measures = stationary_measures/sum_row
