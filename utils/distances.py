@@ -18,18 +18,25 @@ def calculate_histogram(M, Z, l_inv, ind):
             hists[i][j] = np.sum(m[l_inv[Z[j]][ind]])
     return hists
 
+def calculate_Z(deg, n):
+    Z = np.zeros(len(deg))
+    zero_mask = Z == 0
+    non_zero_mask = np.invert(zero_mask)
+    Z[non_zero_mask] = (1 / Z[non_zero_mask]) + 2*n
+    Z[zero_mask] = 2*n
+    return Z
+
 def calculate_cost_matrix(M_1, M_2, l_inv):
     n = M_1.shape[0]
     m = M_2.shape[0]
     cost_matrix = np.zeros((n, m))
     # Calculating histograms for each vertex
-    Z = np.array(list(l_inv.keys()))
+    deg = np.array(list(l_inv.keys()))
+    Z1 = calculate_Z(deg, n)
+    Z2 = calculate_Z(deg, m)
 
-    Z1 = (1/Z) + n
-    Z2 = (1/Z) + m
-
-    hist1 = calculate_histogram(M_1, Z, l_inv, 0)
-    hist2 = calculate_histogram(M_2, Z, l_inv, 1)
+    hist1 = calculate_histogram(M_1, deg, l_inv, 0)
+    hist2 = calculate_histogram(M_2, deg, l_inv, 1)
     for i in range(n):
         for j in range(m):
             cost_matrix[i][j] = ot.wasserstein_1d(Z1, Z2, hist1[i], hist2[j])
@@ -44,8 +51,6 @@ def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping, return_coupling=False
     M_H = weighted_transition_matrix(H, q)
 
     # calculate M_G^k and M_H^k
-
-   # print(type(np.linalg.matrix_power(M_G, k)))
     expm_G = np.linalg.matrix_power(M_G, k)
     expm_H = np.linalg.matrix_power(M_H, k)
 
@@ -54,21 +59,20 @@ def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping, return_coupling=False
     H_measures = get_extremal_stationary_measures(H, M_H)
     couplings = get_couplings(G_measures, H_measures)
     cost_matrix = calculate_cost_matrix(expm_G, expm_H, l_inv)
-
+    print(cost_matrix)
     dist = np.inf
     coupling = None
     for cp in couplings:
         m1 = cp[0]
         m2 = cp[1]
-        # W = ot.emd2(m1, m2, cost_matrix)
-        W = ot.sinkhorn2(m1, m2, cost_matrix, 1)[0]
+        W = ot.emd2(m1, m2, cost_matrix)
+        # W = ot.sinkhorn2(m1, m2, cost_matrix)[0]
         if W < dist:
             dist = W
             coupling = (m1, m2)
     if return_coupling == False:
-        return W
-
-    return W, coupling
+        return dist
+    return dist, coupling
 
 if __name__ == '__main__':
     G = nx.Graph()

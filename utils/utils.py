@@ -5,9 +5,13 @@ import itertools
 def weighted_transition_matrix(G, q):
     A = np.asarray(nx.adjacency_matrix(G, weight=None).todense())
     n = A.shape[0]
-    D = np.sum(A, axis=1)
+    D = np.sum(A, axis = 1)
+    mask = D == 0
+    D[mask] = 1
     A = (A * (1 - q))/D
     A = A + q * np.identity(n)
+    single_node_inds = np.nonzero(mask)[0]
+    A[single_node_inds, single_node_inds] = 1
     return A
 
 
@@ -69,6 +73,6 @@ def get_couplings(m1, m2):
 
 if __name__ == '__main__':
     G = nx.Graph()
-    G.add_nodes_from([0, 1, 2])
-    G.add_edges_from([(0, 1), (1, 2)])
+    G.add_nodes_from([0, 1, 2, 3])
+    G.add_edges_from([(0, 1), (2, 3)])
     print(weighted_transition_matrix(G, 0.6))
