@@ -38,7 +38,6 @@ def get_components(G):
         L.append(c)
     return L
 
-# TO IMPLEMENT
 def get_extremal_stationary_measures(G, transition_mat):
     # Get transition matrix for G
     components = get_components(G)
@@ -66,8 +65,8 @@ def get_stationary_measures(M):
     stationary_measures = stationary_measures/sum_row
     return stationary_measures
 
-def get_couplings(m1, m2):
-    couplings = [(x, y) for x in m1 for y in m2]
+def get_couplings(n, m):
+    couplings = [(x, y) for x in range(n) for y in range(m)]
     return couplings
 
 

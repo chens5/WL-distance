@@ -9,8 +9,10 @@ import numpy as np
 import time
 #from wl_distance.utils import wl_lower_bound
 import sys
+from wtk.utilities import krein_svm_grid_search
 sys.path.insert(1, './utils/')
 from distances import wl_lower_bound
+from nearest_neighbor import mp_compute_dist_train, mp_compute_dist_test
 
 def markov_chain_lb_kernel(G1, G2, k, lam):
     dist, cp = wl_lower_bound(G1, G2, k)
@@ -29,6 +31,7 @@ def compute_kernel_matrix(graph_data, k, lam):
         kernel_matrix[pair[0]][pair[1]] = kernel
         kernel_matrix[pair[1]][pair[0]] = kernel
     return kernel_matrix
+
 
 def compute_kernel_test(G_test, G_train, k, lam):
     n = len(G_test)
@@ -61,6 +64,13 @@ def run_markov_chain_svm(G, y, k, lam):
 
     return accuracy_score(y_test, y_pred)
 
+def run_ksvm(G, y, k):
+    G_train, G_test, y_train, y_test = train_test_split(G, y, test_size=0.1, random_state=23)
+
+    D_train = mp_compute_dist_train(G_train, k)
+    D_test = mp_compute_dist_test(G_train, G_test, k)
+    svm_clf = krein_svm_grid_search(D_train, D_test, y_train, y_test)
+    print(svm_clf)
 
 # These graphs G need to be switched to grakel format
 def run_grakel_svm(kernel, G, y):
@@ -78,9 +88,11 @@ def run_grakel_svm(kernel, G, y):
 def experiments(k, lam):
     #kernels = ["random_walk", "shortest_path", "weisfeiler_lehman_optimal_assignment", "weisfeiler_lehman"]
     MUTAG = fetch_dataset("MUTAG")
-    G = MUTAG.data
-    #nx_G = grakel_to_nx(G)
-    y = MUTAG.target
+    G = MUTAG.data[:10]
+    nx_G = grakel_to_nx(G)
+    y = MUTAG.target[:10]
+    run_ksvm(G, nx_G, 1)
+    e()
     sp_kernel = GraphKernel(kernel="shortest_path")
     print("Running SVC with shortest path")
     start = time.time()

@@ -17,6 +17,7 @@ import igraph as ig
 from tqdm import trange, tqdm
 import cProfile
 import re
+import multiprocessing as mp
 
 def grakel_to_igraph(G):
     lst = []
@@ -24,6 +25,53 @@ def grakel_to_igraph(G):
         adj_mat = graph.get_adjacency_matrix()
         lst.append(ig.Graph.Adjacency(adj_mat))
     return lst
+
+def mp_compute_dist_train(graph_data, k, n_cpus=10):
+    pool = mp.Pool(processes=n_cpus)
+    jobs = []
+    pairs = []
+    n = len(graph_data)
+    for pairs_of_indexes in itertools.combinations(range(0, n), 2):
+        pairs.append(pairs_of_indexes)
+    
+    for i in range(len(pairs)):
+        G1 = graph_data[pairs[i][0]]
+        G2 = graph_data[pairs[i][1]]
+        job = pool.apply_async(wl_lower_bound, args=(G1, G2, k))
+        jobs.append(job)
+    pool.close()
+    print("added jobs to pool")
+    for job in tqdm(jobs):
+        job.wait()
+    results = [job.get() for job in jobs]
+    ## format results
+    dist_matrix = np.zeros((n, n))
+    for i in range(len(pairs)):
+        pair = pairs[i]
+        dist_matrix[pair[0]][pair[1]] = results[i]
+        dist_matrix[pair[1]][pair[0]] = results[i]
+    
+    return dist_matrix
+
+def mp_compute_dist_test(G_test, G_train, k, n_cpus=10):
+    n = len(G_test)
+    m = len(G_train)
+    
+    pool = mp.Pool(processes=n_cpus)
+    jobs = []
+    
+    for i in range(n):
+        for j in range(m):
+            G1 = G_test[i]
+            G2 = G_train[j]
+            job = pool.apply_async(wl_lower_bound, args=(G1, G2, k))
+            jobs.append(job)
+    pool.close()
+    for job in tqdm(jobs):
+        job.wait()
+    results = [job.get() for job in jobs]
+    return np.reshape(results, (n, m))
+
 
 def compute_dist_train(graph_data, k):
     pairs = []
@@ -57,12 +105,14 @@ def knn_mlb_experiments(G, y, k_neigh, k_step, random_state=23):
     clf = KNeighborsClassifier(n_neighbors=k_neigh, metric='precomputed')
     print("Compting pairwise distances in train set.....")
     start = time.time()
-    D_train = compute_dist_train(G_train, k_step)
+    #D_train = compute_dist_train(G_train, k_step)
+    D_train = mp_compute_dist_train(G_train, k_step, n_cpus=20)
     end = time.time()
     print("Time to compute:", end - start)
     print("Computing pairwise distances in test set......")
     start = time.time()
-    D_test = compute_dist_test(G_test, G_train, k_step)
+   # D_test = compute_dist_test(G_test, G_train, k_step)
+    D_test = mp_compute_dist_test(G_test, G_train, k_step, n_cpus=20)
     end = time.time()
     print("Time to compute:", end - start)
     clf.fit(D_train, y_train)
@@ -71,16 +121,16 @@ def knn_mlb_experiments(G, y, k_neigh, k_step, random_state=23):
 
     return accuracy_score(y_test, y_pred)
 
-def knn_wwl(G, y, k_neigh, k_step, random_state=23):
+def knn_wwl(G, y, k_neigh, random_state=23):
     # get indices of train set
     # get indices of test set
     num_graphs = len(G)
     train_indices, test_indices, y_train, y_test = train_test_split(np.arange(0, num_graphs), y, test_size = 0.2, random_state=random_state)
 
-    mat = wwl.pairwise_wasserstein_distances(G)
+    mat = wwl.pairwise_wasserstein_distance(G)
     D_train = mat[train_indices][:, train_indices]
     D_test = mat[test_indices][:, train_indices]
-    clf = KNeighbors(n_neighbors = k_neigh, metric = 'precomputed')
+    clf = KNeighborsClassifier(n_neighbors = k_neigh, metric = 'precomputed')
 
     clf.fit(D_train, y_train)
 
@@ -90,17 +140,38 @@ def knn_wwl(G, y, k_neigh, k_step, random_state=23):
 
 def experiments(G, y):
     k_neigh = 1
-    steps = [2, 2]
-    print("MUTAG dataset results on 5-nearest neighbor")
+    steps = [1, 2, 3, 4]
+    random_states = [23, 42, 64, 73, 91]
+    print("MUTAG dataset results on 1-nearest neighbor")
     for k_step in steps:
-        accuracy = knn_mlb_experiments(G, y, k_neigh, k_step)
-        print("k =", k_step, "accuracy:", accuracy)
+        accuracies = []
+        for rs in random_states:
+            accuracy = knn_mlb_experiments(G, y, k_neigh, k_step, random_state=rs)
+            #accuracy = knn_wwl(G, y, 1, random_state=rs)
+            print("k = ", k_step, "accuracy:", accuracy)
+            accuracies.append(accuracy)
+        print("k = ", k_step, "average accuracy:", np.mean(accuracies), "std:", np.std(accuracies))
+    #random_states = [23, 42, 64, 73]
+    #for rs in random_states:
+    #    print("Accuracy for WWL:", knn_wwl(G, y, k_neigh, random_state = rs))
+
+def test(G):
+    num_connected = 0
+    for graph in G:
+        if nx.is_connected(graph):
+            num_connected += 1
+    return num_connected/len(G)
 
 if __name__ == "__main__":
-    MUTAG = fetch_dataset("MUTAG", as_graphs = True)
+    MUTAG = fetch_dataset("IMDB-BINARY", as_graphs = True)
     G = MUTAG.data
-    ig_G = grakel_to_igraph(G)
+    #nx_G = grakel_to_igraph(G)
+    nx_G = grakel_to_nx(G)
     y = MUTAG.target
-    knn_wwl(ig_G, y, 1, 1)
+    print(test(nx_G))
+   # print(compute_dist_train(nx_G, 1))
+   # mp_compute_dist_train(nx_G, 1)
+   # experiments(ig_G, y)
+   # print("Accuracy for WWL", knn_wwl(ig_G, y, 1, 1))
    # experiments(nx_G, y)
    # cProfile.run('re.compile("wl_lower_bound")')
