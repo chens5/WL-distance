@@ -153,25 +153,17 @@ def experiments(G, y):
         print("k = ", k_step, "average accuracy:", np.mean(accuracies), "std:", np.std(accuracies))
     #random_states = [23, 42, 64, 73]
     #for rs in random_states:
-    #    print("Accuracy for WWL:", knn_wwl(G, y, k_neigh, random_state = rs))
-
-def test(G):
-    num_connected = 0
-    for graph in G:
-        if nx.is_connected(graph):
-            num_connected += 1
-    return num_connected/len(G)
+    #    print("Accuracy for WWL:", knn_wwl(G, y, k_neigh, random_state = rs)
 
 if __name__ == "__main__":
-    MUTAG = fetch_dataset("IMDB-BINARY", as_graphs = True)
+    MUTAG = fetch_dataset("PROTEINS", as_graphs = True)
     G = MUTAG.data
     #nx_G = grakel_to_igraph(G)
     nx_G = grakel_to_nx(G)
     y = MUTAG.target
-    print(test(nx_G))
    # print(compute_dist_train(nx_G, 1))
    # mp_compute_dist_train(nx_G, 1)
    # experiments(ig_G, y)
    # print("Accuracy for WWL", knn_wwl(ig_G, y, 1, 1))
-   # experiments(nx_G, y)
+    experiments(nx_G, y)
    # cProfile.run('re.compile("wl_lower_bound")')

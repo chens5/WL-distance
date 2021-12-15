@@ -11,8 +11,7 @@ import time
 import sys
 from wtk.utilities import krein_svm_grid_search
 sys.path.insert(1, './utils/')
-from distances import wl_lower_bound
-from nearest_neighbor import mp_compute_dist_train, mp_compute_dist_test
+from distances import wl_lower_bound, mp_compute_dist_train, mp_compute_dist_test
 
 def markov_chain_lb_kernel(G1, G2, k, lam):
     dist, cp = wl_lower_bound(G1, G2, k)

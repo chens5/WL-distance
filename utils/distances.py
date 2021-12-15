@@ -68,32 +68,43 @@ def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping):
     G_measures = get_extremal_stationary_measures(G, M_G)
     H_measures = get_extremal_stationary_measures(H, M_H)
     cost_matrix = calculate_cost_matrix(expm_G, expm_H, l_inv)
-    cost_matrix = cost_matrix + 1e-5
+    if np.all(cost_matrix<=1e-3):
+        return 0.0
 
     coupling_matrix = np.zeros((len(G_measures), len(H_measures)))
     for i in range(len(G_measures)):
         for j in range(len(H_measures)):
             m1 = G_measures[i]
             m2 = H_measures[j]
-            W = ot.emd2(m1, m2, cost_matrix)
-            #W = ot.sinkhorn2(m1, m2, cost_matrix, 5)
+            #W = ot.emd2(m1, m2, cost_matrix)
+            W = ot.sinkhorn2(m1, m2, cost_matrix, )
             coupling_matrix[i][j] = W
-    print(coupling_matrix)
-    seen_g = np.zeros(len(G_measures))
-    seen_h = np.zeros(len(H_measures))
-    lst_dists = []
-    dist = np.inf
+    #seen_g = np.zeros(len(G_measures))
+    #seen_h = np.zeros(len(H_measures))
+    #lst_dists = []
+    #dist = np.inf
     
-    while np.sum(seen_g) != len(G_measures) and np.sum(seen_h) != len(H_measures):
-        ind = np.unravel_index(np.argmin(coupling_matrix), coupling_matrix.shape)
-        dist = coupling_matrix[ind]
-        coupling_matrix[ind] = np.inf
-        if seen_g[ind[0]] != 1:
-            seen_g[ind[0]] = 1
-        if seen_h[ind[1]] != 1:
-            seen_h[ind[1]] = 1
-    
-    return dist
+    #while np.sum(seen_g) != len(G_measures) and np.sum(seen_h) != len(H_measures):
+    #    ind = np.unravel_index(np.argmin(coupling_matrix), coupling_matrix.shape)
+    #    dist = coupling_matrix[ind]
+    #    coupling_matrix[ind] = np.inf
+    #    if seen_g[ind[0]] != 1:
+    #        seen_g[ind[0]] = 1
+    #    if seen_h[ind[1]] != 1:
+    #        seen_h[ind[1]] = 1
+
+    g_minimax = -np.inf
+    for i in range(len(G_measures)):
+        g_min = np.min(coupling_matrix[i])
+        if g_min > g_minimax:
+            g_minimax = g_min
+    h_minimax = -np.inf
+    for i in range(len(H_measures)):
+        h_min = np.min(coupling_matrix[:, i])
+        if h_min > h_minimax:
+            h_minimax = h_min
+
+    return max(g_minimax, h_minimax)
 
 def mp_compute_dist_train(graph_data, k, n_cpus = 10):
     pool = mp.Pool(processes=n_cpus)
