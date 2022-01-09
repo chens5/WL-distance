@@ -5,6 +5,7 @@ import networkx as nx
 import ot
 import time
 import multiprocessing as mp
+from tqdm import tqdm
 
 def calculate_histogram(M, Z, l_inv, ind):
     n = M.shape[0]
@@ -31,8 +32,7 @@ def deg_Z(deg, n):
     return deg
 
 def calculate_Z4(deg, n):
-    return Z + 1/n
-
+    return deg + 1/n
 
 def calculate_cost_matrix(M_1, M_2, l_inv):
     n = M_1.shape[0]
@@ -42,8 +42,10 @@ def calculate_cost_matrix(M_1, M_2, l_inv):
     deg = np.array(list(l_inv.keys()))
     #Z1 = calculate_Z(deg, n, 2)
     #Z2 = calculate_Z(deg, m, 2)
-    Z1 = deg_Z(deg, n)
-    Z2 = deg_Z(deg, n)    
+    #Z1 = deg_Z(deg, n)
+    #Z2 = deg_Z(deg, n)
+    Z1 = calculate_Z4(deg, n)
+    Z2 = calculate_Z4(deg, m)
 
     hist1 = calculate_histogram(M_1, deg, l_inv, 0)
     hist2 = calculate_histogram(M_2, deg, l_inv, 1)
@@ -53,10 +55,10 @@ def calculate_cost_matrix(M_1, M_2, l_inv):
     return cost_matrix
 
 
-def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping):
+def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping, ref_measures="norm_degree"):
     #l_inv = {degree:[[g1, ..., gk], [h1, ...., hk]]}
     l_inv = degree_mapping(G, H)
-
+    
     M_G = weighted_transition_matrix(G, q)
     M_H = weighted_transition_matrix(H, q)
 
@@ -65,20 +67,23 @@ def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping):
     expm_H = np.linalg.matrix_power(M_H, k)
 
     # calculate stationary measures
-    G_measures = get_extremal_stationary_measures(G, M_G)
-    H_measures = get_extremal_stationary_measures(H, M_H)
+    #G_measures = get_extremal_stationary_measures(G, M_G)
+    #H_measures = get_extremal_stationary_measures(H, M_H)
+    G_measure = normalized_degree_measure(G)
+    H_measure = normalized_degree_measure(H)
+
     cost_matrix = calculate_cost_matrix(expm_G, expm_H, l_inv)
     if np.all(cost_matrix<=1e-3):
         return 0.0
-
-    coupling_matrix = np.zeros((len(G_measures), len(H_measures)))
-    for i in range(len(G_measures)):
-        for j in range(len(H_measures)):
-            m1 = G_measures[i]
-            m2 = H_measures[j]
-            #W = ot.emd2(m1, m2, cost_matrix)
-            W = ot.sinkhorn2(m1, m2, cost_matrix, )
-            coupling_matrix[i][j] = W
+    
+    #coupling_matrix = np.zeros((len(G_measures), len(H_measures)))
+    #for i in range(len(G_measures)):
+    #    for j in range(len(H_measures)):
+    #        m1 = G_measures[i]
+    #        m2 = H_measures[j]
+    #        W = ot.emd2(m1, m2, cost_matrix)
+            #W = ot.sinkhorn2(m1, m2, cost_matrix, 1)
+    #        coupling_matrix[i][j] = W
     #seen_g = np.zeros(len(G_measures))
     #seen_h = np.zeros(len(H_measures))
     #lst_dists = []
@@ -93,18 +98,18 @@ def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping):
     #    if seen_h[ind[1]] != 1:
     #        seen_h[ind[1]] = 1
 
-    g_minimax = -np.inf
-    for i in range(len(G_measures)):
-        g_min = np.min(coupling_matrix[i])
-        if g_min > g_minimax:
-            g_minimax = g_min
-    h_minimax = -np.inf
-    for i in range(len(H_measures)):
-        h_min = np.min(coupling_matrix[:, i])
-        if h_min > h_minimax:
-            h_minimax = h_min
-
-    return max(g_minimax, h_minimax)
+    #g_minimax = -np.inf
+    #for i in range(len(G_measures)):
+    #    g_min = np.min(coupling_matrix[i])
+    #    if g_min > g_minimax:
+    #        g_minimax = g_min
+    #h_minimax = -np.inf
+    #for i in range(len(H_measures)):
+    #    h_min = np.min(coupling_matrix[:, i])
+    #    if h_min > h_minimax:
+    #        h_minimax = h_min
+    
+    return ot.emd2(G_measure, H_measure, cost_matrix)
 
 def mp_compute_dist_train(graph_data, k, n_cpus = 10):
     pool = mp.Pool(processes=n_cpus)
@@ -131,7 +136,7 @@ def mp_compute_dist_train(graph_data, k, n_cpus = 10):
         dist_matrix[pair[0]][pair[1]] = results[i]
     return dist_matrix
 
-def mp_compute_dist_test(G_test, G_train, k, n_cpus=10):
+def mp_compute_dist_test(G_train, G_test, k, n_cpus=10):
     n = len(G_test)
     m = len(G_train)
 
@@ -161,7 +166,7 @@ if __name__ == '__main__':
     G.add_edges_from([(0, 1), (1, 2), (2, 3), (0, 3), (4, 5), (5, 6), (6, 7), (7, 4)])
     H = nx.Graph()
     H.add_nodes_from([0, 1, 2, 3, 4, 5, 6, 7])
-    H.add_edges_from([(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7), (0, 7)])
+    H.add_edges_from([(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
     start = time.time()
     dist = wl_lower_bound(G, H, 2)
     end = time.time()

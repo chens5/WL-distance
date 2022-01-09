@@ -38,6 +38,15 @@ def get_components(G):
         L.append(c)
     return L
 
+def normalized_degree_measure(G):
+    n = G.number_of_nodes()
+    measure = np.zeros(n)
+    total = 0
+    for node in G.nodes():
+        measure[node] = G.degree[node]
+        total += G.degree[node]
+    return measure/total
+
 def get_extremal_stationary_measures(G, transition_mat):
     # Get transition matrix for G
     components = get_components(G)

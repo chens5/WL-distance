@@ -19,11 +19,19 @@ import cProfile
 import re
 import multiprocessing as mp
 
-def grakel_to_igraph(G):
+def grakel_to_igraph(G, add_attr=False):
     lst = []
     for graph in G:
         adj_mat = graph.get_adjacency_matrix()
-        lst.append(ig.Graph.Adjacency(adj_mat))
+        igraph = ig.Graph.Adjacency(adj_mat)
+        if add_attr:
+            n = adj_mat.shape[0]
+            attrs = np.zeros(n)
+            nodes = sorted(list(graph.node_labels.keys()))
+            for i in range(n):
+                attrs[i] = graph.node_labels[nodes[i]]
+            igraph.vs["attr"] = attrs
+        lst.append(igraph)
     return lst
 
 def mp_compute_dist_train(graph_data, k, n_cpus=10):
@@ -82,7 +90,7 @@ def compute_dist_train(graph_data, k):
     for pair in tqdm(pairs):
         G1 = graph_data[pair[0]]
         G2 = graph_data[pair[1]]
-        dist = wl_lower_bound(G1, G2, k, q=0.6)
+        dist = wl_lower_bound(G1, G2, k)
         dist_matrix[pair[0]][pair[1]] = dist
         dist_matrix[pair[1]][pair[0]] = dist
     return dist_matrix
@@ -95,25 +103,31 @@ def compute_dist_test(G_test, G_train, k):
         G1 = G_test[i]
         for j in range(m):
             G2 = G_train[j]
-            dist = wl_lower_bound(G1, G2, k, q=0.6)
+            dist = wl_lower_bound(G1, G2, k)
             dist_matrix[i][j] = dist
     return dist_matrix
 
 # TO IMPLEMENT
-def knn_mlb_experiments(G, y, k_neigh, k_step, random_state=23):
+def knn_mlb_experiments(G, y, k_neigh, k_step, dataset_name, random_state=23):
     G_train, G_test, y_train, y_test = train_test_split(G, y, test_size=0.2, random_state=random_state)
     clf = KNeighborsClassifier(n_neighbors=k_neigh, metric='precomputed')
     print("Compting pairwise distances in train set.....")
     start = time.time()
     #D_train = compute_dist_train(G_train, k_step)
-    D_train = mp_compute_dist_train(G_train, k_step, n_cpus=20)
+    D_train = mp_compute_dist_train(G, k_step, n_cpus=24)
     end = time.time()
+    save_train_name = "/data/sam/" + dataset_name + "/f3/distances_" + str(k_step)
+    np.save(save_train_name, D_train)
+    return 0
+
     print("Time to compute:", end - start)
     print("Computing pairwise distances in test set......")
     start = time.time()
    # D_test = compute_dist_test(G_test, G_train, k_step)
-    D_test = mp_compute_dist_test(G_test, G_train, k_step, n_cpus=20)
+    D_test = mp_compute_dist_test(G_test, G_train, k_step, n_cpus=24)
     end = time.time()
+    save_test_name = "/data/sam/proteins/point7/f2/D_test" + str(random_state) + '_' + str(k_step)
+    np.save(save_test_name, D_test)
     print("Time to compute:", end - start)
     clf.fit(D_train, y_train)
 
@@ -127,7 +141,7 @@ def knn_wwl(G, y, k_neigh, random_state=23):
     num_graphs = len(G)
     train_indices, test_indices, y_train, y_test = train_test_split(np.arange(0, num_graphs), y, test_size = 0.2, random_state=random_state)
 
-    mat = wwl.pairwise_wasserstein_distance(G)
+    mat = wwl.pairwise_wasserstein_distance(G, num_iterations=6)
     D_train = mat[train_indices][:, train_indices]
     D_test = mat[test_indices][:, train_indices]
     clf = KNeighborsClassifier(n_neighbors = k_neigh, metric = 'precomputed')
@@ -138,32 +152,36 @@ def knn_wwl(G, y, k_neigh, random_state=23):
 
     return accuracy_score(y_test, y_pred)
 
-def experiments(G, y):
+def experiments(G, y, ds_name):
     k_neigh = 1
     steps = [1, 2, 3, 4]
     random_states = [23, 42, 64, 73, 91]
     print("MUTAG dataset results on 1-nearest neighbor")
     for k_step in steps:
-        accuracies = []
-        for rs in random_states:
-            accuracy = knn_mlb_experiments(G, y, k_neigh, k_step, random_state=rs)
+        knn_mlb_experiments(G, y, k_neigh, k_step, ds_name)
+        #accuracies = []
+        #for rs in random_states:
+            #accuracy = knn_mlb_experiments(G, y, k_neigh, k_step, random_state=rs)
             #accuracy = knn_wwl(G, y, 1, random_state=rs)
-            print("k = ", k_step, "accuracy:", accuracy)
-            accuracies.append(accuracy)
-        print("k = ", k_step, "average accuracy:", np.mean(accuracies), "std:", np.std(accuracies))
+            #print("k = ", k_step, "accuracy:", accuracy)
+            #accuracies.append(accuracy)
+        #print("k = ", k_step, "average accuracy:", np.mean(accuracies), "std:", np.std(accuracies))
     #random_states = [23, 42, 64, 73]
     #for rs in random_states:
     #    print("Accuracy for WWL:", knn_wwl(G, y, k_neigh, random_state = rs)
 
 if __name__ == "__main__":
-    MUTAG = fetch_dataset("PROTEINS", as_graphs = True)
-    G = MUTAG.data
-    #nx_G = grakel_to_igraph(G)
-    nx_G = grakel_to_nx(G)
-    y = MUTAG.target
-   # print(compute_dist_train(nx_G, 1))
-   # mp_compute_dist_train(nx_G, 1)
-   # experiments(ig_G, y)
-   # print("Accuracy for WWL", knn_wwl(ig_G, y, 1, 1))
-    experiments(nx_G, y)
+    datasets = ["PTC_FM", "PTC_MR", "MUTAG", "IMDB-BINARY", "IMDB-MULTI", "COX2_MD"]
+    ds_name = ["ptc_fm", "ptc_mr", "mutag", "imdb_b", "imdb_m", "cox2_md"]
+    for i in range(len(ds_name)):
+        MUTAG = fetch_dataset(datasets[i], as_graphs = True)
+        G = MUTAG.data
+        #nx_G = grakel_to_igraph(G, add_attr=True)
+        nx_G = grakel_to_nx(G)
+        y = MUTAG.target
+        # print(compute_dist_train(nx_G, 1))
+        # mp_compute_dist_train(nx_G, 1)
+        # experiments(ig_G, y)
+        # print("Accuracy for WWL", knn_wwl(ig_G, y, 1, 1))
+        experiments(nx_G, y, ds_name[i])
    # cProfile.run('re.compile("wl_lower_bound")')
