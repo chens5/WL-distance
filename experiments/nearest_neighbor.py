@@ -41,7 +41,7 @@ def mp_compute_dist_train(graph_data, k, n_cpus=10):
     n = len(graph_data)
     for pairs_of_indexes in itertools.combinations(range(0, n), 2):
         pairs.append(pairs_of_indexes)
-    
+
     for i in range(len(pairs)):
         G1 = graph_data[pairs[i][0]]
         G2 = graph_data[pairs[i][1]]
@@ -58,130 +58,57 @@ def mp_compute_dist_train(graph_data, k, n_cpus=10):
         pair = pairs[i]
         dist_matrix[pair[0]][pair[1]] = results[i]
         dist_matrix[pair[1]][pair[0]] = results[i]
-    
+
     return dist_matrix
 
-def mp_compute_dist_test(G_test, G_train, k, n_cpus=10):
-    n = len(G_test)
-    m = len(G_train)
-    
-    pool = mp.Pool(processes=n_cpus)
-    jobs = []
-    
-    for i in range(n):
-        for j in range(m):
-            G1 = G_test[i]
-            G2 = G_train[j]
-            job = pool.apply_async(wl_lower_bound, args=(G1, G2, k))
-            jobs.append(job)
-    pool.close()
-    for job in tqdm(jobs):
-        job.wait()
-    results = [job.get() for job in jobs]
-    return np.reshape(results, (n, m))
 
-
-def compute_dist_train(graph_data, k):
-    pairs = []
-    n = len(graph_data)
-    for pairs_of_indexes in itertools.combinations(range(0, n),  2):
-        pairs.append(pairs_of_indexes)
-    dist_matrix = np.zeros((n, n))
-    for pair in tqdm(pairs):
-        G1 = graph_data[pair[0]]
-        G2 = graph_data[pair[1]]
-        dist = wl_lower_bound(G1, G2, k)
-        dist_matrix[pair[0]][pair[1]] = dist
-        dist_matrix[pair[1]][pair[0]] = dist
-    return dist_matrix
-
-def compute_dist_test(G_test, G_train, k):
-    n = len(G_test)
-    m = len(G_train)
-    dist_matrix = np.zeros((n, m))
-    for i in trange(n):
-        G1 = G_test[i]
-        for j in range(m):
-            G2 = G_train[j]
-            dist = wl_lower_bound(G1, G2, k)
-            dist_matrix[i][j] = dist
-    return dist_matrix
-
-# TO IMPLEMENT
-def knn_mlb_experiments(G, y, k_neigh, k_step, dataset_name, random_state=23):
-    G_train, G_test, y_train, y_test = train_test_split(G, y, test_size=0.2, random_state=random_state)
-    clf = KNeighborsClassifier(n_neighbors=k_neigh, metric='precomputed')
+def caluclate_pairwise_distances(G, y, k_step, dataset_name):
     print("Compting pairwise distances in train set.....")
     start = time.time()
-    #D_train = compute_dist_train(G_train, k_step)
-    D_train = mp_compute_dist_train(G, k_step, n_cpus=24)
+    distances = mp_compute_dist_train(G, k_step, n_cpus=24)
     end = time.time()
     save_train_name = "/data/sam/" + dataset_name + "/f3/distances_" + str(k_step)
-    np.save(save_train_name, D_train)
+    np.save(save_train_name, distances)
     return 0
 
-    print("Time to compute:", end - start)
-    print("Computing pairwise distances in test set......")
-    start = time.time()
-   # D_test = compute_dist_test(G_test, G_train, k_step)
-    D_test = mp_compute_dist_test(G_test, G_train, k_step, n_cpus=24)
-    end = time.time()
-    save_test_name = "/data/sam/proteins/point7/f2/D_test" + str(random_state) + '_' + str(k_step)
-    np.save(save_test_name, D_test)
-    print("Time to compute:", end - start)
-    clf.fit(D_train, y_train)
+def nearest_neighbor_exp(num_G, y, dataset_name):
+    k_step = [1, 2, 3, 4]
+    iterations = 10
+    graph_index = np.arange(num_G)
+    mat_wwl = wwl.pairwise_wasserstein_distance(G, num_iterations=10)
+    wwl_accuracies = []
+    for i in range(iterations):
+        train_index, test_index, y_train, y_test = train_test_split(np.arange(0, num_graphs), y, test_size=0.1, random_state=i)
+        D_train = mat[train_index][:, train_index]
+        D_test = mat[test_index][:, train_index]
+        clf.KNeighborsClassifier(n_neighbors = k_neigh, metric='precomputed')
+        clf.fit(D_train, y_train)
+        y_pred = clf.predict(D_test)
+        wwl_accuracies.append(accuracy_score(y_test, y_pred))
 
-    y_pred = clf.predict(D_test)
+    print("WWL average accuracy:", np.mean(wwl_accuracies), "std dev:", np.std(wwl_accuracies))
 
-    return accuracy_score(y_test, y_pred)
-
-def knn_wwl(G, y, k_neigh, random_state=23):
-    # get indices of train set
-    # get indices of test set
-    num_graphs = len(G)
-    train_indices, test_indices, y_train, y_test = train_test_split(np.arange(0, num_graphs), y, test_size = 0.2, random_state=random_state)
-
-    mat = wwl.pairwise_wasserstein_distance(G, num_iterations=6)
-    D_train = mat[train_indices][:, train_indices]
-    D_test = mat[test_indices][:, train_indices]
-    clf = KNeighborsClassifier(n_neighbors = k_neigh, metric = 'precomputed')
-
-    clf.fit(D_train, y_train)
-
-    y_pred = clf.predict(D_test)
-
-    return accuracy_score(y_test, y_pred)
-
-def experiments(G, y, ds_name):
-    k_neigh = 1
-    steps = [1, 2, 3, 4]
-    random_states = [23, 42, 64, 73, 91]
-    print("MUTAG dataset results on 1-nearest neighbor")
-    for k_step in steps:
-        knn_mlb_experiments(G, y, k_neigh, k_step, ds_name)
-        #accuracies = []
-        #for rs in random_states:
-            #accuracy = knn_mlb_experiments(G, y, k_neigh, k_step, random_state=rs)
-            #accuracy = knn_wwl(G, y, 1, random_state=rs)
-            #print("k = ", k_step, "accuracy:", accuracy)
-            #accuracies.append(accuracy)
-        #print("k = ", k_step, "average accuracy:", np.mean(accuracies), "std:", np.std(accuracies))
-    #random_states = [23, 42, 64, 73]
-    #for rs in random_states:
-    #    print("Accuracy for WWL:", knn_wwl(G, y, k_neigh, random_state = rs)
+    for k in k_step:
+        distance_fname = "/data/sam/" + dataset_name + "/f2/distances_" + str(k)
+        dist_matrix = np.load(distance_fname)
+        k_accuracies = []
+        for i in range(iterations):
+            train_index, test_index, y_train, y_test = train_test_split(np.arange(num_G), y, test_size=0.1, random_state=i)
+            D_train = dist_matrix[train_index][: , train_index]
+            D_test = dist_matrix[test_index][:, train_index]
+            clf = KNeighborsClassifier(n_neighbors = 1, metric='precomputed')
+            clf.fit(D_train, y_train)
+            y_pred = clf.predict(D_test)
+            k_accuracies.append(accuracy_score(y_test, y_pred))
+        print("k = ", k, "Avg. Accuracy = ", np.mean(k_accuracies), "Standard Dev. = ", np.std(k_accuracies))
 
 if __name__ == "__main__":
-    datasets = ["PTC_FM", "PTC_MR", "MUTAG", "IMDB-BINARY", "IMDB-MULTI", "COX2_MD"]
-    ds_name = ["ptc_fm", "ptc_mr", "mutag", "imdb_b", "imdb_m", "cox2_md"]
+    datasets = ["PTC_FM", "PTC_MR", "MUTAG", "IMDB-BINARY", "IMDB-MULTI", "COX2_MD", "PROTEINS"]
+    ds_name = ["ptc_fm", "ptc_mr", "mutag", "imdb_b", "imdb_m", "cox2_md", "proteins"]
     for i in range(len(ds_name)):
         MUTAG = fetch_dataset(datasets[i], as_graphs = True)
         G = MUTAG.data
-        #nx_G = grakel_to_igraph(G, add_attr=True)
         nx_G = grakel_to_nx(G)
         y = MUTAG.target
-        # print(compute_dist_train(nx_G, 1))
-        # mp_compute_dist_train(nx_G, 1)
-        # experiments(ig_G, y)
-        # print("Accuracy for WWL", knn_wwl(ig_G, y, 1, 1))
-        experiments(nx_G, y, ds_name[i])
-   # cProfile.run('re.compile("wl_lower_bound")')
+        print("---- Results for: ", datasets[i], " ----")
+        nearest_neighbor_exp(len(G), y, ds_name[i])

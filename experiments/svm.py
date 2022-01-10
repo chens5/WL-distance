@@ -15,81 +15,6 @@ from distances import wl_lower_bound, wl_lb_distance_matrices
 from tqdm import tqdm, trange
 import multiprocessing as mp
 
-def markov_chain_lb_kernel(G1, G2, k, lam):
-    dist = wl_lower_bound(G1, G2, k)
-    return np.exp(-lam * dist)
-
-def compute_kernel_matrix(graph_data, k, lam):
-    pairs = []
-    n = len(graph_data)
-    for pairs_of_indexes in itertools.combinations(range(0, n),  2):
-        pairs.append(pairs_of_indexes)
-    kernel_matrix = np.zeros((n, n))
-    dist_mat = np.zeros((n, n))
-    for pair in tqdm(pairs):
-        G1 = graph_data[pair[0]]
-        G2 = graph_data[pair[1]]
-        dist_mat[pair[0]][pair[1]] = wl_lower_bound(G1, G2, k)
-        #kernel = markov_chain_lb_kernel(G1, G2, k, lam)
-        #kernel_matrix[pair[0]][pair[1]] = kernel
-        #kernel_matrix[pair[1]][pair[0]] = kernel
-    return dist_mat
-
-
-def compute_kernel_test(G_test, G_train, k, lam):
-    n = len(G_test)
-    m = len(G_train)
-    kernel_matrix = np.zeros((n, m))
-    for i in trange(n):
-        G1 = G_test[i]
-        for j in range(m):
-            G2 = G_train[j]
-            kernel = wl_lower_bound(G1, G2, k)
-            #kernel= markov_chain_lb_kernel(G1, G2, k, lam)
-            kernel_matrix[i][j] = kernel
-    return kernel_matrix
-
-def mp_compute_dist_train(graph_data, k, n_cpus = 10):
-    pool = mp.Pool(processes=n_cpus)
-    jobs = []
-    pairs = []
-    n = len(graph_data)
-    for pairs_of_indexes in itertools.combinations(range(0, n), 2):
-        pairs.append(pairs_of_indexes)
-    for i in range(len(pairs)):
-        G1 = graph_data[pairs[i][0]]
-        G2 = graph_data[pairs[i][1]]
-        job = pool.apply_async(wl_lower_bound, args=(G1, G2, k))
-        jobs.append(job)
-    pool.close()
-    print("added jobs to pool")
-    for job in tqdm(jobs):
-        job.wait()
-    results = [job.get() for job in jobs]
-    dist_matrix = np.zeros((n, n))
-    for i in range(len(pairs)):
-        pair = pairs[i]
-        dist_matrix[pair[0]][pair[1]] = results[i]
-        dist_matrix[pair[1]][pair[0]] = results[i]
-    return dist_matrix
-
-def mp_compute_dist_test(G_test, G_train, k, n_cpus = 10):
-    n = len(G_test)
-    m = len(G_train)
-    pool = mp.Pool(processes=n_cpus)
-    jobs = []
-    for i in range(n):
-        for j in range(m):
-            G1 = G_test[i]
-            G2 = G_train[j]
-            job = pool.apply_async(wl_lower_bound, args=(G1, G2, k))
-            jobs.append(job)
-    pool.close()
-    for job in tqdm(jobs):
-        job.wait()
-    results = [job.get() for job in jobs]
-    return np.reshape(results, (n, m))
-
 def grakel_to_nx(G):
     nx_G = []
     for graph in G:
@@ -154,30 +79,84 @@ def run_grakel_svm(kernel, G, y, random_state=23):
 
     return accuracy_score(y_test, y_pred)
 
+def svm_experiment(num_G, y, dataset_name):
+    gammas = [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+    Cs = [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+    train_test_split(np.arange(num_G), y, test_size = 0.1)
+    skf = StratifiedKFold(n_splits = 10)
+    k_step = [1, 2, 3, 4]
+    for k in k_step:
+        distance_fname = "/data/sam/" + dataset_name + "/f2/distances_" + str(k)
+        distances = np.load(distance_fname)
+        accuracies = []
+        for train_index, test_index in skf.split(distances, y):
+            D_train = D[train_index][:, train_index]
+            D_test = D[test_index][:, train_index]
+            y_train = y[train_index]
+            y_test = y[test_index]
+            params = choose_parameters(gammas, Cs, D_train, y_train, cv=5)
+            K_train = np.exp(-params[0]*D_train)
+            K_test = np.exp(-params[0]*D_test)
+
+            clf = SVC(kernel='precomputed', C = c, max_iter=5000)
+            clf.fit(K_train, y_train)
+            y_pred = clf.predict(K_test)
+            accuracies.append(accuracy_score(y_test, y_pred))
+        print("k =", k, "Average accuracy = ", np.mean(accuracies), "Std. Dev. = ", np.std(accuracies))
+
+
+
+def choose_parameters( gammas, Cs, D, y, cv=5):
+    cv = StratifiedKFold(n_splits=cv)
+    results = []
+    param_pairs = []
+    for g in gammas:
+        for c in Cs:
+            param_pairs.append((g, c))
+
+    for train_index, test_index in cv.split(D, y):
+        split_results = []
+        for i in range(len(gammas)):
+            for j in range(len(Cs)):
+                g = gammas[i]
+                c = Cs[j]
+                D_train = D[train_index][:, train_index]
+                D_test = D[test_index][:, train_index]
+                K_train = np.exp(-g * D_train)
+                K_test = np.exp(-g * D_test)
+                y_train = y[train_index]
+                y_test = y[test_index]
+                clf = SVC(kernel='precomputed', C = c, max_iter=5000)
+                clf.fit(K_train, y_train)
+                y_pred = clf.predict(K_test)
+                split_results.append(accuracy_score(y_test, y_pred))
+        results.append(split_results)
+
+    results = np.array(results)
+    fin_results = results.mean(axis=0)
+    best_idx = np.argmax(fin_results)
+    return param_pairs[best_idx]
+
+def new_experiments():
+    datasets = ["PTC_FM", "PTC_MR", "MUTAG", "IMDB-BINARY", "IMDB-MULTI", "COX2_MD", "PROTEINS"]
+    ds_name = ["ptc_fm", "ptc_mr", "mutag", "imdb_b", "imdb_m", "cox2_md", "proteins"]
+    for i in range(len(ds_name)):
+        DS = fetch_dataset(datasets[i], as_graphs = True)
+        G = DS.data
+        nx_G = grakel_to_nx(G)
+        y = DS.target
+        print("---- Results for: ", datasets[i], "------")
+        svm_experiment(len(G), y, ds_name[i])
+
+
+
 def experiments(k, lam):
     #kernels = ["random_walk", "shortest_path", "weisfeiler_lehman_optimal_assignment", "weisfeiler_lehman"]
     MUTAG = fetch_dataset("PROTEINS",as_graphs=True )
     G = MUTAG.data
     nx_G = grakel_to_nx(G)
     y = MUTAG.target
-    #sp_kernel = GraphKernel(kernel="shortest_path")
-    #print("Running SVC with shortest path")
-    #start = time.time()
-    #random_states = [23, 42, 64, 73, 91]
-    #acc = []
-    #for rs in random_states:
-    #    acc.append(run_grakel_svm(sp_kernel, G, y, random_state=rs))
 
-    #print("Accuracy:", np.mean(acc), "std:", np.std(acc))
-    #end = time.time()
-    #print("Done in:", end - start)
-
-    #print("Running SVC with Weisfeiler-Lehman Kernel")
-    #wl_subtree_kernel = WeisfeilerLehman(n_iter=20, base_graph_kernel=VertexHistogram, normalize=True)
-    #start = time.time()
-    #print("Accuracy:", run_grakel_svm(wl_subtree_kernel, G, y))
-    #end = time.time()
-    #print("Done in:", end - start)
     gammas = [0.001, 0.01, 0.1, 1, 10, 100]
     Cs = [0.01, 0.1, 1, 10, 100]
     random_states = [23, 42, 64, 73, 91]
@@ -226,4 +205,3 @@ if __name__ == "__main__":
     #G = MUTAG.data[:30]
     #y = MUTAG.target[:30]
     #nx_G = grakel_to_nx(G)
-    
