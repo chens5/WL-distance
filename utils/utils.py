@@ -32,6 +32,24 @@ def degree_mapping(G1, G2):
             mapping[deg][1].append(node)
     return mapping
 
+def node_label_mapping(G1, G2):
+    mapping = {}
+    for node in G1.nodes():
+        deg = G1.degree[node]
+        lbl = deg + G1.nodes[node]["attr"]
+        if lbl not in mapping:
+            mapping[lbl] = [[node], []]
+        else:
+            mapping[lbl][0].append(node)
+    for node in G2.nodes():
+        deg = G2.degree[node]
+        lbl = deg + G2.nodes[node]["attr"]
+        if lbl not in mapping:
+            mapping[lbl] = [[], [node]]
+        else:
+            mapping[lbl][1].append(node)
+    return mapping
+
 def get_components(G):
     L = []
     for c in nx.connected_components(G):

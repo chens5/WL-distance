@@ -34,6 +34,7 @@ def deg_Z(deg, n):
 def calculate_Z4(deg, n):
     return deg + 1/n
 
+
 def calculate_cost_matrix(M_1, M_2, l_inv):
     n = M_1.shape[0]
     m = M_2.shape[0]
@@ -42,10 +43,10 @@ def calculate_cost_matrix(M_1, M_2, l_inv):
     deg = np.array(list(l_inv.keys()))
     #Z1 = calculate_Z(deg, n, 2)
     #Z2 = calculate_Z(deg, m, 2)
-    #Z1 = deg_Z(deg, n)
-    #Z2 = deg_Z(deg, n)
-    Z1 = calculate_Z4(deg, n)
-    Z2 = calculate_Z4(deg, m)
+    Z1 = deg_Z(deg, n)
+    Z2 = deg_Z(deg, n)
+    #Z1 = calculate_Z4(deg, n)
+    #Z2 = calculate_Z4(deg, m)
 
     hist1 = calculate_histogram(M_1, deg, l_inv, 0)
     hist2 = calculate_histogram(M_2, deg, l_inv, 1)
@@ -58,7 +59,7 @@ def calculate_cost_matrix(M_1, M_2, l_inv):
 def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping, ref_measures="norm_degree"):
     #l_inv = {degree:[[g1, ..., gk], [h1, ...., hk]]}
     l_inv = degree_mapping(G, H)
-    
+    #l_inv = node_label_mapping(G, H)
     M_G = weighted_transition_matrix(G, q)
     M_H = weighted_transition_matrix(H, q)
 

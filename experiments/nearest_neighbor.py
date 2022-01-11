@@ -21,18 +21,31 @@ import multiprocessing as mp
 
 def grakel_to_igraph(G, add_attr=False):
     lst = []
+    attr_list = []
+    max_nodes = 0
+    szs = []
     for graph in G:
         adj_mat = graph.get_adjacency_matrix()
         igraph = ig.Graph.Adjacency(adj_mat)
-        if add_attr:
-            n = adj_mat.shape[0]
-            attrs = np.zeros(n)
-            nodes = sorted(list(graph.node_labels.keys()))
-            for i in range(n):
-                attrs[i] = graph.node_labels[nodes[i]]
-            igraph.vs["attr"] = attrs
+        n = adj_mat.shape[0]
+        if n > max_nodes:
+            max_nodes = n
+        #if add_attr:
+        #    n = adj_mat.shape[0]
+        #    attrs = []
+        #    nodes = sorted(list(graph.node_labels.keys()))
+        #    for i in range(n):
+        #        attrs.append( graph.node_labels[nodes[i]])
+        #    attr_list.append(attrs)
         lst.append(igraph)
-    return lst
+    if add_attr:
+        for graph in G:
+            nodes = sorted(list(graph.node_labels.keys()))
+            attrs = [0]*max_nodes
+            for i in range(graph.n):
+                attrs[i] = graph.node_labels[nodes[i]]
+            attr_list.append(attrs)
+    return lst, attr_list
 
 def mp_compute_dist_train(graph_data, k, n_cpus=10):
     pool = mp.Pool(processes=n_cpus)
@@ -62,26 +75,26 @@ def mp_compute_dist_train(graph_data, k, n_cpus=10):
     return dist_matrix
 
 
-def caluclate_pairwise_distances(G, y, k_step, dataset_name):
+def calculate_pairwise_distances(G, y, k_step, dataset_name):
     print("Compting pairwise distances in train set.....")
     start = time.time()
     distances = mp_compute_dist_train(G, k_step, n_cpus=24)
     end = time.time()
-    save_train_name = "/data/sam/" + dataset_name + "/f3/distances_" + str(k_step)
+    save_train_name = "/data/sam/" + dataset_name + "/f4/distances_" + str(k_step)
     np.save(save_train_name, distances)
     return 0
 
-def nearest_neighbor_exp(num_G, y, dataset_name):
+def nearest_neighbor_exp(num_G,igraphs, y, dataset_name, wwl_features=None):
     k_step = [1, 2, 3, 4]
     iterations = 10
     graph_index = np.arange(num_G)
-    mat_wwl = wwl.pairwise_wasserstein_distance(G, num_iterations=10)
+    mat_wwl = wwl.pairwise_wasserstein_distance(igraphs,node_features=wwl_features, num_iterations=10)
     wwl_accuracies = []
     for i in range(iterations):
-        train_index, test_index, y_train, y_test = train_test_split(np.arange(0, num_graphs), y, test_size=0.1, random_state=i)
-        D_train = mat[train_index][:, train_index]
-        D_test = mat[test_index][:, train_index]
-        clf.KNeighborsClassifier(n_neighbors = k_neigh, metric='precomputed')
+        train_index, test_index, y_train, y_test = train_test_split(np.arange(0, num_G), y, test_size=0.1, random_state=i)
+        D_train = mat_wwl[train_index][:, train_index]
+        D_test = mat_wwl[test_index][:, train_index]
+        clf = KNeighborsClassifier(n_neighbors = 1, metric='precomputed')
         clf.fit(D_train, y_train)
         y_pred = clf.predict(D_test)
         wwl_accuracies.append(accuracy_score(y_test, y_pred))
@@ -89,7 +102,7 @@ def nearest_neighbor_exp(num_G, y, dataset_name):
     print("WWL average accuracy:", np.mean(wwl_accuracies), "std dev:", np.std(wwl_accuracies))
 
     for k in k_step:
-        distance_fname = "/data/sam/" + dataset_name + "/f2/distances_" + str(k)
+        distance_fname = "/data/sam/" + dataset_name + "/f4/distances_" + str(k) + '.npy'
         dist_matrix = np.load(distance_fname)
         k_accuracies = []
         for i in range(iterations):
@@ -103,12 +116,17 @@ def nearest_neighbor_exp(num_G, y, dataset_name):
         print("k = ", k, "Avg. Accuracy = ", np.mean(k_accuracies), "Standard Dev. = ", np.std(k_accuracies))
 
 if __name__ == "__main__":
-    datasets = ["PTC_FM", "PTC_MR", "MUTAG", "IMDB-BINARY", "IMDB-MULTI", "COX2_MD", "PROTEINS"]
-    ds_name = ["ptc_fm", "ptc_mr", "mutag", "imdb_b", "imdb_m", "cox2_md", "proteins"]
+    datasets = ["MUTAG", "BZR", "PTC_MR", "PTC_FM", "COX2_MD", "PROTEINS", "COX2", "ENZYMES"]
+    ds_name = [ "mutag", "bzr", "ptc_mr", "ptc_fm", "cox2_md", "proteins", "cox2", "enzymes"]
+    #datasets = ["BZR"]
+    #ds_name = ["bzr"]
     for i in range(len(ds_name)):
         MUTAG = fetch_dataset(datasets[i], as_graphs = True)
         G = MUTAG.data
         nx_G = grakel_to_nx(G)
+        igraphs, graph_attrs = grakel_to_igraph(G, add_attr=True)
         y = MUTAG.target
         print("---- Results for: ", datasets[i], " ----")
-        nearest_neighbor_exp(len(G), y, ds_name[i])
+        nearest_neighbor_exp(len(G),igraphs, y, ds_name[i])
+        #for j in range(1, 5):
+        #    calculate_pairwise_distances(nx_G, y, j, ds_name[i])
