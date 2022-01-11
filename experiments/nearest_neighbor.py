@@ -19,34 +19,6 @@ import cProfile
 import re
 import multiprocessing as mp
 
-def grakel_to_igraph(G, add_attr=False):
-    lst = []
-    attr_list = []
-    max_nodes = 0
-    szs = []
-    for graph in G:
-        adj_mat = graph.get_adjacency_matrix()
-        igraph = ig.Graph.Adjacency(adj_mat)
-        n = adj_mat.shape[0]
-        if n > max_nodes:
-            max_nodes = n
-        #if add_attr:
-        #    n = adj_mat.shape[0]
-        #    attrs = []
-        #    nodes = sorted(list(graph.node_labels.keys()))
-        #    for i in range(n):
-        #        attrs.append( graph.node_labels[nodes[i]])
-        #    attr_list.append(attrs)
-        lst.append(igraph)
-    if add_attr:
-        for graph in G:
-            nodes = sorted(list(graph.node_labels.keys()))
-            attrs = [0]*max_nodes
-            for i in range(graph.n):
-                attrs[i] = graph.node_labels[nodes[i]]
-            attr_list.append(attrs)
-    return lst, attr_list
-
 def mp_compute_dist_train(graph_data, k, n_cpus=10):
     pool = mp.Pool(processes=n_cpus)
     jobs = []
@@ -88,7 +60,7 @@ def nearest_neighbor_exp(num_G,igraphs, y, dataset_name, wwl_features=None):
     k_step = [1, 2, 3, 4]
     iterations = 10
     graph_index = np.arange(num_G)
-    mat_wwl = wwl.pairwise_wasserstein_distance(igraphs,node_features=wwl_features, num_iterations=10)
+    mat_wwl = wwl.pairwise_wasserstein_distance(igraphs, num_iterations=10)
     wwl_accuracies = []
     for i in range(iterations):
         train_index, test_index, y_train, y_test = train_test_split(np.arange(0, num_G), y, test_size=0.1, random_state=i)

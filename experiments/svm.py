@@ -16,6 +16,7 @@ from tqdm import tqdm, trange
 import multiprocessing as mp
 from sklearn.utils._testing import ignore_warnings
 from sklearn.exceptions import ConvergenceWarning
+import wwl
 
 def grakel_to_nx(G, include_attr=False):
     nx_G = []
@@ -29,34 +30,33 @@ def grakel_to_nx(G, include_attr=False):
         nx_G.append(nx_graph)
     return nx_G
 
-def run_mlb_svm(G, y):
-    k_steps = [1, 2, 3, 4]
-    gammas = [0.01, 0.1, 1, 10]
-    random_states = [23, 42, 64, 73, 91]
-    for k in k_steps:
-        sum_acc = []
-        for rs in random_states:
-            G_train, G_test, y_train, y_test = train_test_split(G, y, test_size = 0.2, random_state=23)
-            D_train_name = '/data/sam/mutag/' + 'D_train' + str(rs) + '_' + str(k)
-            D_test_name = '/data/sam/mutag/' + 'D_test' + str(rs) + '_' + str(k)
-            #D_train = compute_kernel_matrix(G_train, k, 0.1)
-            #D_test = compute_kernel_test(G_test, G_train, k, 0.1)
-            g_acc = -np.inf
-            gam = None
-            for g in tqdm(gammas):
-                K_train = np.exp(-g * D_train)
-                K_test = np.exp(-g * D_test)
-                clf = SVC(kernel='precomputed')
-                clf.fit(K_train, y_train)
-                y_pred = clf.predict(K_test)
-                accuracy = accuracy_score(y_test, y_pred)
-                print("accuracy", accuracy)
-                if g_acc < accuracy:
-                    g_acc = accuracy
-                    gam = g
-            print("k = ", k, "gamma = ", gam, "accuracy = ", g_acc)
-            sum_acc.append(g_acc)
-        print("k = ", k, "average accuracy = ", np.mean(sum_acc), "std = ", np.std(sum_acc))
+
+def grakel_to_igraph(G, add_attr=False):
+    lst = []
+    attr_list = []
+    max_nodes = 0
+    szs = []
+    for graph in G:
+        adj_mat = graph.get_adjacency_matrix()
+        igraph = ig.Graph.Adjacency(adj_mat)
+        n = adj_mat.shape[0]
+        if add_attr:
+            nodes = sorted(list(graph.node_labels.keys()))
+            attrs = []
+            for i in range(nodes):
+                attrs.append(graph.node_labels[nodes[i]])
+            igraph.vs["labels"] = attrs
+        if n > max_nodes:
+            max_nodes = n
+        lst.append(igraph)
+    if add_attr:
+        for graph in G:
+            nodes = sorted(list(graph.node_labels.keys()))
+            attrs = [0]*max_nodes
+            for i in range(graph.n):
+                attrs[i] = graph.node_labels[nodes[i]]
+            attr_list.append(attrs)
+    return lst, attr_list
 
 def run_ksvm(G, y, k):
     G_train, G_test, y_train, y_test = train_test_split(G, y, test_size=0.2, random_state=23)
@@ -74,8 +74,13 @@ def run_ksvm(G, y, k):
 
 
 # These graphs G need to be switched to grakel format
-def run_grakel_svm(kernel, G, y, random_state=23):
-    G_train, G_test, y_train, y_test = train_test_split(G, y, test_size=0.1, random_state=random_state)
+def grakel_experiments(G, y):
+    wl_kernel = WeisfeilerLehman(n_iter=5, normalize=True, base_graph_kernel=VertexHistogram)
+    wl_oa_kernel = WeisfeilerLehmanOptimalAssignment(n_iter=5)
+    skf = StratifiedKFold(n_splits=10, shuffle=True)
+
+    #for train_index, test_index in skf.split(np.array(len(G)), y):
+
 
     K_train = kernel.fit_transform(G_train)
     K_test = kernel.transform(G_test)
@@ -86,11 +91,39 @@ def run_grakel_svm(kernel, G, y, random_state=23):
 
     return accuracy_score(y_test, y_pred)
 
+def wwl_svm_experiment(G, y):
+    igraphs, attr_list = grakel_to_igraph(G, add_attr=True)
+    distances = wwl.pairwise_wasserstein_distance(igraphs, num_iterations=10)
+    gammas = [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+    C = [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+
+
+    skf = StratifiedKFold(n_splits=10, shuffle=True)
+    accuracies = []
+    for i in range(10):
+        for train_index, test_index in skf.split(distances, y):
+            D_train = distances[train_index][:, train_index]
+            D_test = distances[test_index][:, train_index]
+            y_train = y[train_index]
+            y_test = y[test_index]
+            params = choose_parameters(gammas, Cs, D_train, y_train, cv=5)
+            #print(params)
+            K_train = np.exp(-params[0]*D_train)
+            K_test = np.exp(-params[0]*D_test)
+
+            clf = SVC(kernel='precomputed', C = params[1], max_iter=5000)
+            clf.fit(K_train, y_train)
+            y_pred = clf.predict(K_test)
+            accuracies.append(accuracy_score(y_test, y_pred))
+    print("Done with WWL experiments")
+    print("Average accuracy:", np.mean(accuracies), "Standard deviation:", np.std(accuracies))
+
+
 def svm_experiment(num_G, y, dataset_name, f):
     gammas = [0.001, 0.01, 0.1, 1, 10, 100, 1000]
     Cs = [0.001, 0.01, 0.1, 1, 10, 100, 1000]
     #train_test_split(np.arange(num_G), y, test_size = 0.1)
-    skf = StratifiedKFold(n_splits = 10)
+    skf = StratifiedKFold(n_splits = 10, shuffle=True)
     k_step = [1, 2, 3, 4]
     avg_accuracies = []
     std = []
@@ -168,57 +201,8 @@ def new_experiments():
         f.write("---- Results for:" + datasets[i] + "-------\n")
         #print("---- Results for: ", datasets[i], "------")
         svm_experiment(len(G), y, ds_name[i],f )
+        wwl_svm_experimeng(DS, y, )
         print("Finished with", datasets[i])
-
-
-
-def experiments(k, lam):
-    #kernels = ["random_walk", "shortest_path", "weisfeiler_lehman_optimal_assignment", "weisfeiler_lehman"]
-    MUTAG = fetch_dataset("PROTEINS",as_graphs=True )
-    G = MUTAG.data
-    nx_G = grakel_to_nx(G)
-    y = MUTAG.target
-
-    gammas = [0.001, 0.01, 0.1, 1, 10, 100]
-    Cs = [0.01, 0.1, 1, 10, 100]
-    random_states = [23, 42, 64, 73, 91]
-    k_step = [1, 2, 3, 4]
-    for k in k_step:
-        sum_acc = []
-        per_param_avg = []
-        per_param_std = []
-        for g in gammas:
-            for c in Cs:
-                avg = []
-                for rs in random_states:
-                    G_train, G_test, y_train, y_test = train_test_split(nx_G, y, test_size=0.2, random_state=rs)
-                    D_train_name = "/data/sam/proteins/point7/f2/D_train" + str(rs) + "_" + str(k) + ".npy"
-                    D_test_name = "/data/sam/proteins/point7/f2/D_test" + str(rs) + "_" + str(k) + ".npy"
-                    D_train = np.load(D_train_name)
-                    D_test = np.load(D_test_name)
-                    K_train = np.exp(-g * D_train)
-                    K_test = np.exp(-g * D_test)
-                    clf = SVC(kernel = 'precomputed', C=c, max_iter=1000)
-                    clf.fit(K_train, y_train)
-                    y_pred =clf.predict(K_test)
-                    #print(len(y_pred))
-                    #print(len(y_test))
-                    avg.append(accuracy_score(y_test, y_pred))
-                per_param_avg.append(np.mean(avg))
-                per_param_std.append(np.std(avg))
-        ind = np.argmax(per_param_avg)
-        print("k = ", k, "Average = ", per_param_avg[ind], "std = ", per_param_std[ind])
-
-
-    # print("Running SVC with lower bound kernel")
-    # start = time.time()
-    # print(run_markov_chain_svm(nx_G, y, k , lam))
-    # end = time.time()
-    # print("Done in:", end - start)
-
-    #sp_kernel.fit_transform(G[:5])
-    #tg = Graph(G[0])
-    #print(G[0].get_adjacency_matrix())
 
 
 if __name__ == "__main__":
