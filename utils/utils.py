@@ -1,6 +1,17 @@
 import networkx as nx
 import numpy as np
 import itertools
+import cvxpy as cp
+import ot
+
+def ot_solver(m1, m2, C):
+    A = cp.Variable((len(m1), len(m2)))
+    constraints=[A @ np.ones(len(m1)) == m1, A.T @ np.ones(len(m2)) == m2, A >= 0]
+    obj = cp.Minimize(cp.trace(A.T@ C))
+    prob = cp.Problem(obj, constraints)
+    prob.solve(solver="CVXOPT")
+    return prob.value
+
 
 def weighted_transition_matrix(G, q):
     A = np.asarray(nx.adjacency_matrix(G, weight=None).todense())
@@ -8,7 +19,8 @@ def weighted_transition_matrix(G, q):
     D = np.sum(A, axis = 1)
     mask = D == 0
     D[mask] = 1
-    A = (A * (1 - q))/D
+    D = D.reshape((A.shape[0], 1))
+    A = (1 - q)*A/D
     A = A + q * np.identity(n)
     single_node_inds = np.nonzero(mask)[0]
     A[single_node_inds, single_node_inds] = 1
@@ -36,14 +48,14 @@ def node_label_mapping(G1, G2):
     mapping = {}
     for node in G1.nodes():
         deg = G1.degree[node]
-        lbl = deg + G1.nodes[node]["attr"]
+        lbl = (2**deg)*(3**G1.nodes[node]["attr"])
         if lbl not in mapping:
             mapping[lbl] = [[node], []]
         else:
             mapping[lbl][0].append(node)
     for node in G2.nodes():
         deg = G2.degree[node]
-        lbl = deg + G2.nodes[node]["attr"]
+        lbl = (2**deg) * (3**G2.nodes[node]["attr"])
         if lbl not in mapping:
             mapping[lbl] = [[], [node]]
         else:
@@ -98,7 +110,12 @@ def get_couplings(n, m):
 
 
 if __name__ == '__main__':
-    G = nx.Graph()
-    G.add_nodes_from([0, 1, 2, 3])
-    G.add_edges_from([(0, 1), (2, 3)])
-    print(weighted_transition_matrix(G, 0.6))
+    #G = nx.Graph()
+    #G.add_nodes_from([0, 1, 2, 3])
+    #G.add_edges_from([(0, 1), (2, 3)])
+    #print(weighted_transition_matrix(G, 0.6))
+    C = np.array([[1, 0.5], [0.5, 1]])
+    m1 = np.array([0.5, 0.5])
+    m2 = np.array([0.3, 0.7])
+    print(ot_solver(m1, m2, C))
+    print(ot.emd2(m1, m2, C))
