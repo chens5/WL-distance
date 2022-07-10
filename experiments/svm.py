@@ -10,8 +10,7 @@ import numpy as np
 import time
 #from wl_distance.utils import wl_lower_bound
 import sys
-#from wtk.utilities import krein_svm_grid_search, KreinSVC
-from ksvm_utils import *
+from wtk.utilities import krein_svm_grid_search, KreinSVC
 sys.path.insert(1, './utils/')
 from distances import wl_lower_bound, wl_lb_distance_matrices
 from tqdm import tqdm, trange
@@ -63,19 +62,8 @@ def grakel_to_igraph(G, add_attr=False):
     return lst, attr_list
 
 def run_ksvm(D_train, D_test, y_train, y_test):
-    #G_train, G_test, y_train, y_test = train_test_split(G, y, test_size=0.2, random_state=23)
-
-    #D_train = mp_compute_dist_train(G_train, k)
-    #D_test = mp_compute_dist_test(G_train, G_test, k)
-    print("starting grid search")
+    print("starting KSVM grid search")
     svm_clf, accuracy = krein_svm_grid_search(D_train, D_test, y_train, y_test)
-    #print(svm_param)
-    
-    #print("finised grid search")
-    #clf = KreinSVC(C = svm_param[0], gamma=svm_param[1])
-    #print("started fitting")
-    #clf.fit(D_train, y_train)
-    #y_pred = clf.predict(D_test)
     return accuracy
 
 
@@ -112,14 +100,9 @@ def wwl_svm_experiment(G, y, f):
         y_train = y[train_index]
         y_test = y[test_index]
         params = choose_parameters(gammas, Cs, D_train, y_train, cv=10)
-        #clf=KreinSVC(C = params)
-        #print(params)
-        #K_train = np.exp(-params[0]*D_train)
-        #K_test = np.exp(-params[0]*D_test)
-        #eigv, eigvecs = np.linalg.eigh(K_train)
-        #eigv[eigv< 0] = 0
-        #K_train = eigvecs @ np.diag(eigv) @ np.linalg.inv(eigvecs)
         clf = SVC(kernel='precomputed', C = params[1], max_iter=5000)
+        K_train = np.exp(-params[0]*D_train)
+        K_test = np.exp(-params[0]*D_test)
         clf.fit(K_train, y_train)
         y_pred = clf.predict(K_test)
         accuracies.append(accuracy_score(y_test, y_pred))
@@ -145,26 +128,43 @@ def svm_experiment(num_G, y, dataset_name, f):
             D_test = distances[test_index][:, train_index]
             y_train = y[train_index]
             y_test = y[test_index]
-            #params = choose_parameters(gammas, Cs, D_train, y_train, cv=10)
-            #print(params)
+            params = choose_parameters(gammas, Cs, D_train, y_train, cv=10)
+            print(params)
+            clf = SVC(kernel='precomputed', C = params[1], max_iter=5000)
+            K_train = np.exp(-params[0]*D_train)
+            K_test = np.exp(-params[0]*D_test)
+            clf.fit(D_train, y_train)
+            y_pred = clf.predict(D_test)
+            accuracies.append(accuracy_score(y_test, y_pred))
+        avg_accuracies.append(np.mean(accuracies))
+        std.append(np.std(accuracies))
+        print("DONE WITH k = ", k)
+        print("AVERAGE ACCURACY", np.mean(accuracies))
+        
+
+    for i in range(4):
+        k = i + 1
+        f.write("k = " + str(k) + " Average accuracy = " + str(avg_accuracies[i]) + " Std. Dev = " + str(std[i])+ "\n")
+        print("k =", k, "Average accuracy = ", avg_accuracies[i], "Std. Dev. = ", std[i])
+
+def ksvm_experiment(num_G, y, dataset_name, f):
+    gammas = [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+    Cs = [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+    #train_test_split(np.arange(num_G), y, test_size = 0.1)
+    skf = StratifiedKFold(n_splits = 10, shuffle=True)
+    k_step = [1, 2, 3, 4]
+    avg_accuracies = []
+    std = []
+    for k in k_step:
+        distance_fname = "/data/sam/" + dataset_name + "/f3/distances_" + str(k) + ".npy"
+        distances = np.load(distance_fname)
+        accuracies = []
+        for train_index, test_index in skf.split(distances, y):
+            D_train = distances[train_index][:, train_index]
+            D_test = distances[test_index][:, train_index]
+            y_train = y[train_index]
+            y_test = y[test_index]
             accuracy = run_ksvm(D_train, D_test, y_train, y_test)
-            #h()
-            #print("choosing params")
-            #params = krein_svm_grid_search(D_train, D_test, y_train, y_test)
-            #K_train = np.exp(-params[0]*D_train)
-            #K_test = np.exp(-params[0]*D_test)
-            #eigenvalues, eigenvectors = np.linalg.eigh(K_train)
-            #eigenvalues[eigenvalues < 0] = 0
-            #K_train = eigenvectors @ np.diag(eigenvalues) @ np.linalg.inv(eigenvectors)
-            #eigv, eigvec = np.linalg.eigh(K_test)
-            #eigv[eigv < 0] = 0
-            #K_test = eigvec @ np.diag(eigv) @ np.linalg.inv(eigvec)
-            #pct_nonneg = np.sum(eigenvalues > 0)/len(eigenvalues)
-            #print("k = ", k, "percentage positive eigenvalues", pct_nonneg)
-            #clf = KreinSVC()
-            #clf.fit(D_train, y_train)
-            #y_pred = clf.predict(D_test)
-            #accuracies.append(accuracy_score(y_test, y_pred))
             accuracies.append(accuracy)
         avg_accuracies.append(np.mean(accuracies))
         std.append(np.std(accuracies))

@@ -35,18 +35,18 @@ def calculate_Z4(deg, n):
     return deg + 1/n
 
 
-def calculate_cost_matrix(M_1, M_2, l_inv):
+def calculate_cost_matrix(M_1, M_2, l_inv, mapping="degree_mapping"):
     n = M_1.shape[0]
     m = M_2.shape[0]
     cost_matrix = np.zeros((n, m))
     # Calculating histograms for each vertex
     deg = np.array(list(l_inv.keys()))
-    #Z1 = calculate_Z(deg, n, 2)
-    #Z2 = calculate_Z(deg, m, 2)
-    Z1 = deg_Z(deg, n)
-    Z2 = deg_Z(deg, n)
-    #Z1 = calculate_Z4(deg, n)
-    #Z2 = calculate_Z4(deg, m)
+    if mapping == "degree_mapping":
+        Z1 = deg_Z(deg, n)
+        Z2 = deg_Z(deg, n)
+    else:
+        Z1 = calculate_Z4(deg, n)
+        Z2 = calculate_Z4(deg, m)
 
     hist1 = calculate_histogram(M_1, deg, l_inv, 0)
     hist2 = calculate_histogram(M_2, deg, l_inv, 1)
@@ -102,13 +102,15 @@ def wl_k(G, H, k, q=0.6, mapping="degree", method="emd"):
     #dWLk = ot.sinkhorn2(muX, muY, cost_matrix, 100)
     return dWLk
 
-#def node_label_mapping(G, H):
-#    return 0
-
-def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping, ref_measures="norm_degree", method="emd"):
+# mapping options: sz_degree_mapping, degree_mapping
+def wl_lower_bound(G, H, k, q=0.6, mapping="degree_mapping", ref_measures="norm_degree", method="emd"):
     #l_inv = {degree:[[g1, ..., gk], [h1, ...., hk]]}
-    #l_inv = degree_mapping(G, H)
-    l_inv = node_label_mapping(G, H)
+    # l_inv = degree_mapping(G, H)
+
+    if mapping=="sz_degree_mapping":
+        l_inv = sz_degree_mapping(G, H)
+    else:
+        l_inv = degree_mapping(G, H)
     M_G = weighted_transition_matrix(G, q)
     M_H = weighted_transition_matrix(H, q)
     #print(M_G)
@@ -121,7 +123,7 @@ def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping, ref_measures="norm_de
     G_measure = normalized_degree_measure(G)
     H_measure = normalized_degree_measure(H)
 
-    cost_matrix = calculate_cost_matrix(expm_G, expm_H, l_inv)
+    cost_matrix = calculate_cost_matrix(expm_G, expm_H, l_inv, mapping=mapping)
     if np.all(cost_matrix<=1e-3):
         return 0.0
     if method == "emd":
@@ -133,69 +135,8 @@ def wl_lower_bound(G, H, k, q=0.6, mapping=degree_mapping, ref_measures="norm_de
     #return ot.sinkhorn2(G_measure, H_measure, cost_matrix, 100)
     #return ot.emd2(G_measure, H_measure, cost_matrix)
 
-def mp_compute_dist_train(graph_data, k, n_cpus = 10):
-    pool = mp.Pool(processes=n_cpus)
-    jobs = []
-    pairs = []
-    n = len(graph_data)
-    for pairs_of_indexes in itertools.combinations(range(0, n), 2):
-        pairs.append(pairs_of_indexes)
-    for i in range(len(pairs)):
-        G1 = graph_data[pairs[i][0]]
-        G2 = graph_data[pairs[i][1]]
-        job = pool.apply_async(wl_lower_bound, args=(G1, G2, k))
-        jobs.append(job)
-    pool.close()
-
-    for job in tqdm(jobs):
-        job.wait()
-    results = [job.get() for job in jobs]
-
-    dist_matrix = np.zeros((n, n))
-    for i in range(len(pairs)):
-        pair = pairs[i]
-        dist_matrix[pair[0]][pair[1]] = results[i]
-        dist_matrix[pair[0]][pair[1]] = results[i]
-    return dist_matrix
-
-def mp_compute_dist_test(G_train, G_test, k, n_cpus=10):
-    n = len(G_test)
-    m = len(G_train)
-
-    pool = mp.Pool(processes=n_cpus)
-    jobs = []
-
-    for i in range(n):
-        for j in range(m):
-            G1 = G_test[i]
-            G2 = G_train[j]
-            job = pool.apply_async(wl_lower_bound, args=(G1, G2, k))
-            jobs.append(job)
-    pool.close()
-    for job in tqdm(jobs):
-        job.wait()
-    results = [job.get() for job in jobs]
-    return np.reshape(results, (n, m))
-
-def wl_lb_distance_matrices(G_train,G_test, k, n_cpus=10):
-    D_train = mp_compute_dist_train(G_train, k, n_cpus=n_cpus)
-    D_test = mp_compute_dist_test(G_train, G_test, k, n_cpus=n_cpus)
-    return D_train, D_test
 
 if __name__ == '__main__':
-    #diffs_LB = []
-    #diff_dWLk = []
-    #for i in range(20):
-    #    sz1 = np.randint(5, 20)
-    #    sz2 = np.randint(5, 20)
-    #    G = nx.erdos_renyi_graph(sz1, 0.6)
-    #    H = nx.erods_renyi_graph(sz2, 0.6)
-    #    dLB1 = wl_lower_bound(G, H, 1)
-    #    dLB2 = wl_lower_bound(G, H, 2)
-    #    dWL1 = wL_k(G, H, 1)
-    #    dWL2 = wl_k(G, H, 2)
-    #    diff_LB.append(abs(dLB1 - dLB2))
-    #    diff_dWLk.append(abs(dWL1 - dWL2))
     G = nx.Graph()
     G.add_nodes_from([0, 1, 2, 3])
     G.add_edges_from([(0, 1), (1, 2), (2, 3)])

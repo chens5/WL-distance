@@ -50,10 +50,6 @@ def mp_compute_dist_train(graph_data, k, n_cpus=10, dist="real"):
 
     return dist_matrix
 
-
-#def difference(dataset_name):
-#    dwlk_distance = 
-
 def time_experiment(k):
     for k in range(1, 2):
         wllb = []
@@ -116,24 +112,24 @@ def nearest_neighbor_exp(num_G,igraphs, y, dataset_name, wwl_features=None):
     k_step = [1, 2, 3, 4]
     iterations = 10
     graph_index = np.arange(num_G)
-    #acc = []
-    #std = []
-    #for i in range(1, 5):
-    #    mat_wwl = wwl.pairwise_wasserstein_distance(igraphs, num_iterations=i)
-    #    wwl_accuracies = []
-    #    for i in range(iterations):
-    #        train_index, test_index, y_train, y_test = train_test_split(np.arange(0, num_G), y, test_size=0.1, random_state=i)
-    #        D_train = mat_wwl[train_index][:, train_index]
-    #        D_test = mat_wwl[test_index][:, train_index]
-    #        clf = KNeighborsClassifier(n_neighbors = 1, metric='precomputed')
-    #        clf.fit(D_train, y_train)
-    #        y_pred = clf.predict(D_test)
-    #        wwl_accuracies.append(accuracy_score(y_test, y_pred))
-    #    acc.append(np.mean(wwl_accuracies))
-    #    std.append(np.std(wwl_accuracies))
-    #ind =np.argmax(acc)
+    acc = []
+    std = []
+    for i in range(1, 5):
+       mat_wwl = wwl.pairwise_wasserstein_distance(igraphs, num_iterations=i)
+       wwl_accuracies = []
+       for i in range(iterations):
+           train_index, test_index, y_train, y_test = train_test_split(np.arange(0, num_G), y, test_size=0.1, random_state=i)
+           D_train = mat_wwl[train_index][:, train_index]
+           D_test = mat_wwl[test_index][:, train_index]
+           clf = KNeighborsClassifier(n_neighbors = 1, metric='precomputed')
+           clf.fit(D_train, y_train)
+           y_pred = clf.predict(D_test)
+           wwl_accuracies.append(accuracy_score(y_test, y_pred))
+       acc.append(np.mean(wwl_accuracies))
+       std.append(np.std(wwl_accuracies))
+    ind =np.argmax(acc)
 
-    #print("WWL average accuracy:", acc[ind], "std dev:", std[ind])
+    print("WWL average accuracy:", acc[ind], "std dev:", std[ind])
 
     for k in k_step:
         distance_fname = "/data/sam/" + dataset_name + "/dwlk/f3/distances_" + str(k) + ".npy"
@@ -168,10 +164,7 @@ def max_k_nearest_neighbor_exp(num_G, y, dataset_name):
 if __name__ == "__main__":
     datasets = ["MUTAG", "PTC_MR", "PTC_FM","IMDB-BINARY", "IMDB-MULTI", "COX2", "PROTEINS"]
     ds_name = [ "mutag", "ptc_mr", "ptc_fm","imdb_b", "imdb_m", "cox2", "proteins"]
-    #datasets = ["COX2", "PROTEINS"]
-    #ds_name = ["cox2", "proteins"]
-    #time_experiment(1)
-    #h()
+
     for i in range(len(ds_name)):
         MUTAG = fetch_dataset(datasets[i], as_graphs=True)
         G = MUTAG.data

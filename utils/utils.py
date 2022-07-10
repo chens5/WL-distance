@@ -26,6 +26,24 @@ def weighted_transition_matrix(G, q):
     A[single_node_inds, single_node_inds] = 1
     return A
 
+def sz_degree_mapping(G1, G2):
+    mapping = {}
+    n = G1.number_of_nodes()
+    m = G2.number_of_nodes()
+    for node in G1.nodes():
+        deg = G1.degree[node]
+        if deg not in mapping:
+            mapping[deg + 1/n] = [[node], []]
+        else:
+            mapping[deg + 1/n][0].append(node)
+
+    for node in G2.nodes():
+        deg = G2.degree[node]
+        if deg not in mapping:
+            mapping[deg + 1/m] = [[], [node]]
+        else:
+            mapping[deg + 1/m][1].append(node)
+    return mapping
 
 def degree_mapping(G1, G2):
     mapping = {}
