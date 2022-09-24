@@ -1,13 +1,22 @@
-from utils import *
-import scipy
+from typing import Literal
+from .utils import weighted_transition_matrix, normalized_degree_measure, \
+        sz_degree_mapping, degree_mapping, Array
 import numpy as np
 import networkx as nx
 import ot
-import time
-import multiprocessing as mp
-from tqdm import tqdm
 
-def calculate_histogram(M, Z, l_inv, ind):
+
+def calculate_histogram(M: Array, Z: Array, l_inv: Array, ind: int):
+    """[TODO:summary]
+
+    [TODO:description]
+
+    Args:
+        M: (n, ?) Markov transition matrix, maybe? Or measure. I think its measure
+        Z: (k,) array of labels
+        l_inv: (n, )
+        ind: [TODO:description]
+    """
     n = M.shape[0]
     hists = np.zeros((n, len(Z)))
     len_Z = len(Z)
@@ -56,7 +65,9 @@ def calculate_cost_matrix(M_1, M_2, l_inv, mapping="degree_mapping"):
     return cost_matrix
 
 
-def wl_k(G, H, k, q=0.6, mapping="degree", method="emd"):
+def wl_k(G: nx.Graph, H: nx.Graph, k, q: float=0.6, 
+        mapping: Literal["degree"]="degree", 
+        method: Literal["emd"]="emd"):
     M_G = weighted_transition_matrix(G, q)
     M_H = weighted_transition_matrix(H, q)
     n = M_G.shape[0]
@@ -103,7 +114,24 @@ def wl_k(G, H, k, q=0.6, mapping="degree", method="emd"):
     return dWLk
 
 # mapping options: sz_degree_mapping, degree_mapping
-def wl_lower_bound(G, H, k, q=0.6, mapping="degree_mapping", ref_measures="norm_degree", method="emd"):
+def wl_lower_bound(G, H, k, 
+        q=0.6, 
+        mapping="degree_mapping", 
+        ref_measures="norm_degree", 
+        method="emd"):
+    """[TODO:summary]
+
+    [TODO:description]
+
+    Args:
+        G: [TODO:description]
+        H: [TODO:description]
+        k: [TODO:description]
+        q: [TODO:description]
+        mapping: [TODO:description]
+        ref_measures: [TODO:description]
+        method: [TODO:description]
+    """
     #l_inv = {degree:[[g1, ..., gk], [h1, ...., hk]]}
     # l_inv = degree_mapping(G, H)
 

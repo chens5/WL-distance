@@ -1,8 +1,11 @@
+from typing import TypeAlias
 import networkx as nx
 import numpy as np
-import itertools
+import numpy.typing as npt
 import cvxpy as cp
 import ot
+
+Array: TypeAlias = npt.NDArray[np.float64]
 
 def ot_solver(m1, m2, C):
     A = cp.Variable((len(m1), len(m2)))
@@ -13,8 +16,20 @@ def ot_solver(m1, m2, C):
     return prob.value
 
 
-def weighted_transition_matrix(G, q):
-    A = np.asarray(nx.adjacency_matrix(G, weight=None).todense())
+def weighted_transition_matrix(G:nx.Graph, q: float) -> Array:
+    """Create a LMMC from a Graph
+
+    See def 5
+
+    Args:
+        G: the graph
+        q: the q parameter for the q-markov chain
+
+    Returns:
+        Array: [TODO:description]
+    """
+    A: Array= np.asarray(nx.adjacency_matrix(G, weight=None).todense())#type:ignore
+    # A: Array= nx.to_numpy_array(G, weight=None) #type:ignore
     n = A.shape[0]
     D = np.sum(A, axis = 1)
     mask = D == 0
