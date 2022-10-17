@@ -64,11 +64,11 @@ def calculate_cost_matrix(M_1, M_2, l_inv, mapping="degree_mapping"):
 def wlk_mc(Mx, My, lx, ly, muX, muY,k, return_costs=False, method='emd2'):
     n = Mx.shape[0]
     m = My.shape[0]
-    prev_matrix = np.zeros((n, m))
-    cost_matrix = np.zeros((n, m))
+    prev_matrix = torch.zeros((n, m))
+    cost_matrix = torch.zeros((n, m))
     for i in range(n):
         for j in range(m):
-            prev_matrix[i][j] = np.linalg.norm(lx[i] - ly[j])
+            prev_matrix[i][j] = torch.norm(lx[i] - ly[j])
     costs = []
     for step in range(k):
         for i in range(n):
@@ -83,7 +83,7 @@ def wlk_mc(Mx, My, lx, ly, muX, muY,k, return_costs=False, method='emd2'):
                     raise Exception("method not implemented; use sinkhorn2 or emd2")
         if return_costs:
             costs.append(cost_matrix)
-        prev_matrix = np.copy(cost_matrix)
+        prev_matrix = cost_matrix.detach().clone()
     if method == 'emd2':
         return ot.emd2(muX, muY, cost_matrix)
     elif method == 'sinkhorn2':
