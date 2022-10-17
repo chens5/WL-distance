@@ -4,14 +4,6 @@ import itertools
 import cvxpy as cp
 import ot
 
-def ot_solver(m1, m2, C):
-    A = cp.Variable((len(m1), len(m2)))
-    constraints=[A @ np.ones(len(m1)) == m1, A.T @ np.ones(len(m2)) == m2, A >= 0]
-    obj = cp.Minimize(cp.trace(A.T@ C))
-    prob = cp.Problem(obj, constraints)
-    prob.solve(solver="CVXOPT")
-    return prob.value
-
 
 def weighted_transition_matrix(G, q):
     A = np.asarray(nx.adjacency_matrix(G, weight=None).todense())
@@ -128,12 +120,15 @@ def get_couplings(n, m):
 
 
 if __name__ == '__main__':
-    #G = nx.Graph()
-    #G.add_nodes_from([0, 1, 2, 3])
-    #G.add_edges_from([(0, 1), (2, 3)])
-    #print(weighted_transition_matrix(G, 0.6))
-    C = np.array([[1, 0.5], [0.5, 1]])
-    m1 = np.array([0.5, 0.5])
-    m2 = np.array([0.3, 0.7])
-    print(ot_solver(m1, m2, C))
-    print(ot.emd2(m1, m2, C))
+    G = nx.Graph()
+    G.add_nodes_from([0, 1, 2, 3])
+    G.add_edges_from([(0, 1),(1, 2), (2, 3)])
+    M = weighted_transition_matrix(G, 0)
+    mu = normalized_degree_measure(G)
+    print(mu)
+    print(mu.T @ M)
+    #C = np.array([[1, 0.5], [0.5, 1]])
+    #m1 = np.array([0.5, 0.5])
+    #m2 = np.array([0.3, 0.7])
+    #print(ot_solver(m1, m2, C))
+    #print(ot.emd2(m1, m2, C))
