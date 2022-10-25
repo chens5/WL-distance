@@ -2,6 +2,8 @@
 """Alternative torch implementation, based on sinkhorn instead of ot
 the goal is to get a fast and differentiable loss
 """
+from typing import overload
+
 import torch
 from torch import Tensor
 import torch.nn.functional as F
@@ -10,8 +12,23 @@ import torch.nn.functional as F
 # Because we need arbitrary cost matrices, as opposed to 
 # having access to an embedding in R^n
 
-def sinkhorn(a, b, C, epsilon, k=100, ):
-    """batched version of sinkhorn"""
+def sinkhorn(a: Tensor, b: Tensor, C: Tensor, epsilon: float, k: int=100):
+    """Batched version of sinkhorn distance
+
+    The 3 batch dims will be broadcast to each other. 
+    Every steps is only broadcasted torch operations,
+    so it should be reasonably fast on gpu
+
+    Args:
+        a: (*batch, n) First distribution. 
+        b: (*batch, m) Second distribution
+        C: (*batch, n, m) Cost matrix
+        epsilon: Regularization parameter
+        k: number of iteration (this version does not check for convergence)
+
+    Returns:
+        divergence: (*batch) $divergence[*i] = OT^\epsilon(a[*i], b[*i], C[*i])$
+    """
 
     *batch, n = a.shape
     *batch_, m = b.shape
@@ -33,7 +50,7 @@ def sinkhorn(a, b, C, epsilon, k=100, ):
     res = (C.log() + log_P).exp().sum((-1, -2))
     return res
 
-def markov_measure(M: Tensor):
+def markov_measure(M: Tensor) -> Tensor:
     """Takes a (batched) markov transition matrix, 
     and outputs its stationary distribution
 
