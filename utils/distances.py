@@ -3,7 +3,7 @@ from .utils import weighted_transition_matrix, normalized_degree_measure, \
         sz_degree_mapping, degree_mapping, Array
 import numpy as np
 import networkx as nx
-import ot
+import torch
 
 
 def calculate_histogram(M: Array, Z: Array, l_inv: Array, ind: int):
@@ -65,9 +65,21 @@ def calculate_cost_matrix(M_1, M_2, l_inv, mapping="degree_mapping"):
     return cost_matrix
 
 
-def wl_k(G: nx.Graph, H: nx.Graph, k, q: float=0.6, 
-        mapping: Literal["degree"]="degree", 
+def wl_k(G: nx.Graph, H: nx.Graph, k: int, q: float=0.6, 
+        mapping: Literal["degree", "label"]="degree", 
         method: Literal["emd"]="emd"):
+    """Compute the WL distance
+
+    Computes the WL distance between two graphs
+
+    Args:
+        G: First graph
+        H: Second graph
+        k: number of steps (k parameter for the WL distance)
+        q: q parameter for computing the transitions matrices from graphs
+        mapping: The values of labels on the graphs. Can be "degree", "label", or something else, im not sure
+        method: [TODO:description]
+    """
     M_G = weighted_transition_matrix(G, q)
     M_H = weighted_transition_matrix(H, q)
     n = M_G.shape[0]

@@ -18,7 +18,6 @@ def ot_solver(m1, m2, C):
 
 def weighted_transition_matrix(G:nx.Graph, q: float) -> Array:
     """Create a LMMC from a Graph
-
     See def 5
 
     Args:
