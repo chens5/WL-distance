@@ -59,7 +59,8 @@ def wl_k(MX: Tensor, MY: Tensor,
         muX: Tensor | None = None,
         muY: Tensor | None = None, 
         reg: float=.1, 
-        sinkhorn_iter: int= 100
+        sinkhorn_iter: int= 100,
+        return_differences:bool= False
         ):
     """computes the WL distance
 
@@ -78,29 +79,39 @@ def wl_k(MX: Tensor, MY: Tensor,
         muY: stationary distribution for MY (if omitted, will be recomuputed)
         reg: regularization parameter for sinkhorn
         sinkhorn_iter: number of sinkhorn iterations for a step
+        return_differences: returns MSE(C^k, C^k+1) for all steps (to check convergence)
     """
     b, n, n_ = MX.shape
     b_, m, m_ = MY.shape
     assert (n==n_) and (m == m_) and (b == b_)
-    prev_matrix = (l1[:, :, None] - l2[:, None, :]).abs()
-    cost_matrix = torch.zeros((n, m))
+    cost_matrix = (l1[:, :, None] - l2[:, None, :]).abs()
     
+    if return_differences:
+        differences= []
+        old_matrix = cost_matrix
 
     for _ in range(k):
         # for i in range(n):
         #     cost_matrix[i] = sinkhorn(MX[i], MY.T, prev_matrix, reg=reg) #type:ignore
+        #print(cost_matrix)
         cost_matrix = sinkhorn(
                 MX[:, :, None, :], # b, n, 1, n
                 MY[:, None, :, :], # b, 1, m, m
-                prev_matrix[:, None, None, :, :], # b, 1, 1, n, m
+                cost_matrix[:, None, None, :, :], # b, 1, 1, n, m
                 epsilon=reg, 
                 k= sinkhorn_iter
         ) # b, n, m
+        if return_differences:
+            differences.append((cost_matrix - old_matrix).square().mean())
+            old_matrix = cost_matrix
 
     if muX is None: 
         muX = markov_measure(MX)
     if muY is None:
         muY = markov_measure(MY)
+        
+    if return_differences:
+        return sinkhorn(muX, muY, cost_matrix, reg), differences
 
     return sinkhorn(muX, muY, cost_matrix, reg)
 
