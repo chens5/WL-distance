@@ -1,22 +1,14 @@
-from typing import Literal
-from .utils import weighted_transition_matrix, normalized_degree_measure, \
-        sz_degree_mapping, degree_mapping, Array
+from utils import *
+import scipy
 import numpy as np
 import networkx as nx
+import ot
+import time
+import multiprocessing as mp
+from tqdm import tqdm
 import torch
 
-
-def calculate_histogram(M: Array, Z: Array, l_inv: Array, ind: int):
-    """[TODO:summary]
-
-    [TODO:description]
-
-    Args:
-        M: (n, ?) Markov transition matrix, maybe? Or measure. I think its measure
-        Z: (k,) array of labels
-        l_inv: (n, )
-        ind: [TODO:description]
-    """
+def calculate_histogram(M, Z, l_inv, ind):
     n = M.shape[0]
     hists = np.zeros((n, len(Z)))
     len_Z = len(Z)
@@ -65,21 +57,42 @@ def calculate_cost_matrix(M_1, M_2, l_inv, mapping="degree_mapping"):
     return cost_matrix
 
 
-def wl_k(G: nx.Graph, H: nx.Graph, k: int, q: float=0.6, 
-        mapping: Literal["degree", "label"]="degree", 
-        method: Literal["emd"]="emd"):
-    """Compute the WL distance
+# version of WL distance that works with general labelled measure Markov Chains
+# Note that for both this version and the networkx version, you can either use
+# EMD2 or Sinkhorn2 to compute WL distance (as implemented by POT library)
+# Other implementations for OT must be added by the user.
+def wlk_mc(Mx, My, lx, ly, muX, muY,k, return_costs=False, method='emd2'):
+    n = Mx.shape[0]
+    m = My.shape[0]
+    prev_matrix = torch.zeros((n, m))
+    cost_matrix = torch.zeros((n, m))
+    for i in range(n):
+        for j in range(m):
+            prev_matrix[i][j] = torch.norm(lx[i] - ly[j])
+    costs = []
+    for step in range(k):
+        for i in range(n):
+            for j in range(m):
+                m1 = Mx[i]
+                m2 = My[j]
+                if method == 'emd2':
+                    cost_matrix[i][j] = ot.emd2(m1, m2, prev_matrix)
+                elif method == 'sinkhorn2':
+                    cost_matrix[i][j] = ot.sinkhorn2(m1, m2, prev_matrix, reg=0.1)
+                else:
+                    raise Exception("method not implemented; use sinkhorn2 or emd2")
+        if return_costs:
+            costs.append(cost_matrix)
+        prev_matrix = cost_matrix.detach().clone()
+    if method == 'emd2':
+        return ot.emd2(muX, muY, cost_matrix)
+    elif method == 'sinkhorn2':
+        return ot.sinkhorn2(muX, muY, cost_matrix)
+    else:
+        raise Exception("method not implemented; use sinkhorn2 or emd2")
 
-    Computes the WL distance between two graphs
-
-    Args:
-        G: First graph
-        H: Second graph
-        k: number of steps (k parameter for the WL distance)
-        q: q parameter for computing the transitions matrices from graphs
-        mapping: The values of labels on the graphs. Can be "degree", "label", or something else, im not sure
-        method: [TODO:description]
-    """
+# Version of WL distance that works with networkX graphs
+def wl_k(G, H, k, q=0.6, mapping="degree", method="emd", return_cost=False):
     M_G = weighted_transition_matrix(G, q)
     M_H = weighted_transition_matrix(H, q)
     n = M_G.shape[0]
@@ -94,6 +107,7 @@ def wl_k(G: nx.Graph, H: nx.Graph, k: int, q: float=0.6,
                 prev_matrix[n1][n2] = np.abs(G.nodes[n1]["attr"] - H.nodes[n2]["attr"])
             else:
                 prev_matrix[n1][n2] = np.abs(G.degree[n1] + (1/n) - H.degree[n2] - (1/m))
+    costs = []
     for step in range(k):
         for i in range(n):
             for j in range(m):
@@ -112,6 +126,7 @@ def wl_k(G: nx.Graph, H: nx.Graph, k: int, q: float=0.6,
                 #cost_matrix[i][j] = ot.sinkhorn2(m1, m2, prev_matrix, 100)
                 cost_matrix[i][j] = ot.emd2( m1, m2 ,prev_matrix)
         prev_matrix = np.copy(cost_matrix)
+        costs.append(prev_matrix)
 
     muX = normalized_degree_measure(G)
     muY = normalized_degree_measure(H)
@@ -123,27 +138,12 @@ def wl_k(G: nx.Graph, H: nx.Graph, k: int, q: float=0.6,
         #muY = muY + 1e-3
         dWLk = ot.sinkhorn2(muX, muY, cost_matrix, 1, method='sinkhorn')
     #dWLk = ot.sinkhorn2(muX, muY, cost_matrix, 100)
+    if return_cost:
+        return dWLk, costs
     return dWLk
 
 # mapping options: sz_degree_mapping, degree_mapping
-def wl_lower_bound(G, H, k, 
-        q=0.6, 
-        mapping="degree_mapping", 
-        ref_measures="norm_degree", 
-        method="emd"):
-    """[TODO:summary]
-
-    [TODO:description]
-
-    Args:
-        G: [TODO:description]
-        H: [TODO:description]
-        k: [TODO:description]
-        q: [TODO:description]
-        mapping: [TODO:description]
-        ref_measures: [TODO:description]
-        method: [TODO:description]
-    """
+def wl_lower_bound(G, H, k, q=0.6, mapping="degree_mapping", ref_measures="norm_degree", method="emd"):
     #l_inv = {degree:[[g1, ..., gk], [h1, ...., hk]]}
     # l_inv = degree_mapping(G, H)
 
@@ -181,7 +181,10 @@ if __name__ == '__main__':
     G.add_nodes_from([0, 1, 2, 3])
     G.add_edges_from([(0, 1), (1, 2), (2, 3)])
     H = nx.Graph()
-    H.add_nodes_from([0, 1, 2, 3])
-    H.add_edges_from([(0, 1), (1, 2), (2, 3), (0, 3)])
-    print(wl_k(G, H, 1))
-    print(wl_k(G, H, 10))
+    H.add_nodes_from([0, 1, 2, 3, 4])
+    H.add_edges_from([(0, 1), (0, 2), (0, 3) ,(0, 4)])
+    # print(wl_k(G, H, 1))
+    # print(wl_k(G, H, 10))
+    wlk, costs = wl_k(G, H, 30, q=0.8,  return_cost=True)
+    for i in range(len(costs) - 1):
+        print(np.linalg.norm(costs[i] - costs[i + 1], ord='fro'))
