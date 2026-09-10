@@ -1,0 +1,19 @@
+{
+  "schema": "wl-distance-camera-ready-run-manifest-v1",
+  "purpose": "paper-faithful full WL distance and classification reproduction",
+  "source_repository": "https://github.com/chens5/WL-distance",
+  "source_commit": "2b5950c2cccdb773fa5902142d92b36b5013485d",
+  "datasets": ["MUTAG", "PROTEINS", "IMDB-BINARY", "IMDB-MULTI", "PTC_FM", "PTC_MR", "COX2"],
+  "label_functions": ["f1(G,v)=degree_G(v)", "f2(G,v)=degree_G(v)+1/|V_G|"],
+  "k_values": [1, 2, 3, 4],
+  "q": 0.6,
+  "distance": "paper-faithful recursive full WL distance with exact EMD",
+  "evaluation": {
+    "outer_cv": "10-fold stratified, shuffled with seed 20260909",
+    "standard_svm": "10-fold inner CV, paper gamma/C grid",
+    "wtk_style_svm": "5-fold inner CV, released WTK default grid and paper grid",
+    "one_nearest_neighbor": "10 random 90/10 train/test splits with seeds 0 through 9"
+  },
+  "validation": "MUTAG f1 and f2 first; depth-one full-WL matrices must match corresponding WLLB matrices",
+  "remote_root": "/cluster/pixstor/zwggh-lab/zhengchao/wl_distance_camera_ready/full_dwl_20260909"
+}

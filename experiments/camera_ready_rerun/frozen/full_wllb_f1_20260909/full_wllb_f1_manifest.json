@@ -1,0 +1,18 @@
+{
+  "schema": "wl-distance-camera-ready-run-manifest-v1",
+  "purpose": "paper-faithful WLLB f1 reproduction after the WLLB f2 diagnostic gate",
+  "source_repository": "https://github.com/chens5/WL-distance",
+  "source_commit": "2b5950c2cccdb773fa5902142d92b36b5013485d",
+  "datasets": ["MUTAG", "PROTEINS", "IMDB-BINARY", "IMDB-MULTI", "PTC_FM", "PTC_MR", "COX2"],
+  "k_values": [1, 2, 3, 4],
+  "q": 0.6,
+  "label_function": "f1(G,v)=degree_G(v)",
+  "distance": "paper-faithful WLLB with exact EMD",
+  "evaluation": {
+    "outer_cv": "10-fold stratified, shuffled with seed 20260909",
+    "standard_svm": "10-fold inner CV, paper gamma/C grid",
+    "wtk_style_svm": "5-fold inner CV, released WTK default grid and paper grid",
+    "one_nearest_neighbor": "10 random 90/10 train/test splits with seeds 0 through 9"
+  },
+  "remote_root": "/cluster/pixstor/zwggh-lab/zhengchao/wl_distance_camera_ready/full_wllb_f1_20260909"
+}

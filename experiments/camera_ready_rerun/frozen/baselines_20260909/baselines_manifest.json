@@ -1,0 +1,18 @@
+{
+  "schema": "wl-distance-camera-ready-run-manifest-v1",
+  "purpose": "reproduce the WWL, WL, and WL-OA baselines in the classification tables",
+  "wl_distance_source_commit": "2b5950c2cccdb773fa5902142d92b36b5013485d",
+  "wwl_source_commit": "107a8dfe3d97d8996753dbdc695f4577514cacbf",
+  "datasets": ["MUTAG", "PROTEINS", "IMDB-BINARY", "IMDB-MULTI", "PTC_FM", "PTC_MR", "COX2"],
+  "iterations": [1, 2, 3, 4],
+  "evaluation": {
+    "outer_cv": "10-fold stratified, shuffled with seed 20260909",
+    "inner_cv": "10-fold unshuffled",
+    "wwl_svm_manuscript": "joint selection over iterations 1 through 4, gamma, and C using the manuscript grid",
+    "wwl_svm_released": "the released svm.py fixed num_iterations=5; rerun that variant separately",
+    "wl_and_wloa_svm": "joint selection over iteration and C using the manuscript C grid",
+    "wwl_1nn": "10 random 90/10 train/test splits per iteration; report best mean"
+  },
+  "protocol_discrepancy": "the manuscript says iterations 1 through 4, whereas released svm.py fixes WWL num_iterations=5; released nearest_neighbor.py also mutates its igraph objects so k=1 uses continuous propagation and k=2 through 4 switch to categorical propagation. This run reports both manuscript-intended and released-code variants",
+  "remote_root": "/cluster/pixstor/zwggh-lab/zhengchao/wl_distance_camera_ready/baselines_20260909"
+}
