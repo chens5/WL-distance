@@ -23,18 +23,16 @@ def sz_degree_mapping(G1, G2):
     n = G1.number_of_nodes()
     m = G2.number_of_nodes()
     for node in G1.nodes():
-        deg = G1.degree[node]
-        if deg not in mapping:
-            mapping[deg + 1/n] = [[node], []]
-        else:
-            mapping[deg + 1/n][0].append(node)
+        label = G1.degree[node] + 1 / n
+        if label not in mapping:
+            mapping[label] = [[], []]
+        mapping[label][0].append(node)
 
     for node in G2.nodes():
-        deg = G2.degree[node]
-        if deg not in mapping:
-            mapping[deg + 1/m] = [[], [node]]
-        else:
-            mapping[deg + 1/m][1].append(node)
+        label = G2.degree[node] + 1 / m
+        if label not in mapping:
+            mapping[label] = [[], []]
+        mapping[label][1].append(node)
     return mapping
 
 def degree_mapping(G1, G2):

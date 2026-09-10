@@ -10,7 +10,10 @@ import numpy as np
 import time
 #from wl_distance.utils import wl_lower_bound
 import sys
-from wtk.utilities import krein_svm_grid_search, KreinSVC
+try:
+    from .ksvm_utils import krein_svm_grid_search
+except ImportError:  # Support running this file directly from the repository.
+    from ksvm_utils import krein_svm_grid_search
 sys.path.insert(1, './utils/')
 from distances import wl_lower_bound, wl_lb_distance_matrices
 from tqdm import tqdm, trange
