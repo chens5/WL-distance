@@ -1,5 +1,46 @@
 # Camera-ready rerun (2026-09-09)
 
+## Completed results and report (2026-09-10)
+
+The [final comparison PDF](reports/wl_distance_original_vs_rerun_tables_2026-09-10.pdf)
+contains all 119 1NN entries and 245 SVM/KSVM entries beside the accepted
+manuscript values, followed by the discrepancy analysis. Each published and
+rerun column has its maximum mean in bold, including ties.
+
+`completed_20260910/results/verify_and_aggregate.py` is the exact verification
+and aggregation script used after the run. The existing
+`frozen/loosli_ksvm_20260909/` files were verified byte-for-byte against this
+completed run's code; no algorithm changes were made for this publication.
+
+`completed_20260910/partial_results/tables/` preserves the table generator's
+original directory name even though every table entry is now complete. It
+contains the exact two Python table builders. The comparison builder recalculates
+boldface every time it runs.
+
+Verification passed 112 settings and 1,120 outer-fold rows. All 1,440 final
+pairwise SVM fits converged, with negative eigenvalues present in 1,111 fits.
+Every corrected f2 source-summary hash matched. The final depth-one check
+found identical full-WL/WLLB arrays in all 14 dataset/label cases and zero
+prediction disagreements when evaluated on the same machine and splits.
+
+With the completed result bundle placed in the original relative layout, run:
+
+```bash
+python3 experiments/camera_ready_rerun/completed_20260910/results/verify_and_aggregate.py
+```
+
+The archived scripts retain their original machine paths. The table builders
+require updating `MANUSCRIPT` and `OUTPUT_PDF` to rebuild elsewhere, and the
+accepted manuscript is not included here. Result summaries, fold metrics,
+logs and comparison CSVs remain in the local result bundle; this update
+publishes only code, this README and the final PDF. Large distance matrices
+and dataset archives remain on Hellbender.
+
+The 1NN table still reflects the recorded library tie behavior, which differs
+between CPU architectures for some tied neighbors. Completion and numerical
+checks do not establish the cause of every historical discrepancy; see page
+3 of the report for the evidence and limits of the diagnosis.
+
 This directory preserves the source files that were actually staged on
 Hellbender for the camera-ready rerun.  The files under `frozen/` are copied
 verbatim from the corresponding run directories; they are intentionally not
