@@ -1,0 +1,36 @@
+{
+  "schema": "wl-distance-loosli-ksvm-run-v1",
+  "created": "2026-09-09",
+  "codex_session_id": "01a03090-b099-7773-919e-88e667fa0ef8",
+  "codex_deeplink": "codex://thread/01a03090-b099-7773-919e-88e667fa0ef8",
+  "remote_lab_root": "/cluster/pixstor/zwggh-lab/zhengchao",
+  "run_root": "/cluster/pixstor/zwggh-lab/zhengchao/wl_distance_camera_ready/loosli_ksvm_20260909",
+  "scope": {
+    "datasets": ["MUTAG", "PROTEINS", "PTC_FM", "PTC_MR", "IMDB-BINARY", "IMDB-MULTI", "COX2"],
+    "distance_kinds": ["wllb", "dwl"],
+    "label_modes": ["f1", "f2"],
+    "depths": [1, 2, 3, 4],
+    "matrix_settings": 112
+  },
+  "paper_settings": {
+    "q": 0.6,
+    "f1": "degree_G(v)",
+    "f2": "degree_G(v)+1/|V_G|",
+    "kernel": "exp(-gamma * distance)",
+    "C_grid": [0.001, 0.01, 0.1, 1, 10, 100, 1000],
+    "gamma_grid": [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+  },
+  "reproduction_choices_not_stated_in_manuscript": {
+    "outer_splits": 10,
+    "inner_splits": 10,
+    "outer_shuffle": true,
+    "inner_shuffle": false,
+    "seed": 20260909,
+    "multiclass": "one-vs-one with libsvm-compatible first-class vote tie break"
+  },
+  "implementation": {
+    "algorithm": "full-rank Algorithm 1 of Loosli, Canu, and Ong; no clipping and no test-kernel projection",
+    "f2_guard": "requires source summary label_function to equal f2(G,v)=degree_G(v)+1/|V_G|",
+    "validation": "remote Slurm smoke test requires reduction to ordinary SVM for a PSD kernel and transform identities for an indefinite kernel"
+  }
+}

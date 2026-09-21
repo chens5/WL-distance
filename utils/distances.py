@@ -41,16 +41,19 @@ def calculate_cost_matrix(M_1, M_2, l_inv, mapping="degree_mapping"):
     m = M_2.shape[0]
     cost_matrix = np.zeros((n, m))
     # Calculating histograms for each vertex
-    deg = np.array(list(l_inv.keys()))
+    label_values = np.array(sorted(l_inv.keys()))
     if mapping == "degree_mapping":
-        Z1 = deg_Z(deg, n)
-        Z2 = deg_Z(deg, n)
+        Z1 = deg_Z(label_values, n)
+        Z2 = deg_Z(label_values, n)
     else:
-        Z1 = calculate_Z4(deg, n)
-        Z2 = calculate_Z4(deg, m)
+        # sz_degree_mapping keys are already the complete labels
+        # degree_G(v) + 1 / |V_G|.  Both measures live on their union,
+        # so applying the graph-size offsets again would change f2.
+        Z1 = label_values
+        Z2 = label_values
 
-    hist1 = calculate_histogram(M_1, deg, l_inv, 0)
-    hist2 = calculate_histogram(M_2, deg, l_inv, 1)
+    hist1 = calculate_histogram(M_1, label_values, l_inv, 0)
+    hist2 = calculate_histogram(M_2, label_values, l_inv, 1)
     for i in range(n):
         for j in range(m):
             cost_matrix[i][j] = ot.wasserstein_1d(Z1, Z2, hist1[i], hist2[j])

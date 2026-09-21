@@ -1,0 +1,17 @@
+{
+  "schema": "wl-distance-camera-ready-full-wllb-f2-v1",
+  "date": "2026-09-09",
+  "objective": "Rerun the complete WLLB-f2 block underlying Tables 2 and 3 after isolating the anomalous KSVM result.",
+  "source_repository": "https://github.com/chens5/WL-distance",
+  "source_commit": "2b5950c2cccdb773fa5902142d92b36b5013485d",
+  "backend": "Hellbender",
+  "remote_root": "/cluster/pixstor/zwggh-lab/zhengchao/wl_distance_camera_ready/full_wllb_f2_20260909",
+  "datasets": ["MUTAG", "PROTEINS", "IMDB-BINARY", "IMDB-MULTI", "PTC_FM", "PTC_MR", "COX2"],
+  "k_values": [1, 2, 3, 4],
+  "q": 0.6,
+  "label_function": "f2(G,v)=degree_G(v)+1/|V_G|",
+  "distance": "paper-faithful WLLB with exact EMD",
+  "evaluation": "10-fold outer stratified CV; standard SVM uses 10-fold inner CV; released WTK-style method uses 5-fold inner CV; fixed seed 20260909; both released-default and manuscript-stated grids retained; SVC runs to convergence (max_iter=-1)",
+  "codex_session_id": "01a03090-b099-7773-919e-88e667fa0ef8",
+  "codex_deeplink": "codex://thread/01a03090-b099-7773-919e-88e667fa0ef8"
+}

@@ -1,209 +1,311 @@
+"""Krein-space SVM for indefinite kernels.
 
-import os
+This is a direct Python implementation of Algorithm 1 in
+
+    Loosli, Canu, and Ong, "Learning SVM in Krein Spaces",
+    IEEE TPAMI 38(6), 2016.
+
+For binary labels y in {-1, +1}, the algorithm eigendecomposes the
+label-weighted Gram matrix G = Y K Y, solves an ordinary SVM after replacing
+its spectrum by its absolute value, maps the dual solution back with
+U sign(D) U^T, and predicts with the original (possibly indefinite) kernel.
+Multiclass classification uses a one-vs-one decomposition.
+
+The public repository previously used an eigenvalue-clipping helper from WTK.
+Clipping produces a positive-semidefinite approximation and is not the KSVM
+algorithm described above.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from itertools import combinations
+
 import numpy as np
-import logging
-
-from glob import glob
-from pathlib import Path
-import shutil
-
-import numpy as np
-from os.path import basename, join
-
-from numpy.linalg import eigh
-
-from sklearn.svm import SVC
+from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import StratifiedKFold
-
-from sklearn.model_selection import ParameterGrid
-from sklearn.model_selection._validation import _fit_and_score
-from sklearn.base import clone, ClassifierMixin, BaseEstimator
-from sklearn.metrics import make_scorer, accuracy_score
+from sklearn.svm import SVC
 
 
-def strip_suffix(s, suffix):
-    '''
-    Removes a suffix from a string if the string contains it. Else, the
-    string will not be modified and no error will be raised.
-    '''
+PAPER_GRID = np.asarray([1e-3, 1e-2, 1e-1, 1.0, 10.0, 100.0, 1000.0])
 
-    if not s.endswith(suffix):
-        return s
-    return s[:len(s)-len(suffix)]
 
-def get_ucr_dataset(data_dir: str, dataset_name: str):
-    '''
-    Loads train and test data from a folder in which
-    the UCR data sets are stored.
-    '''
+@dataclass
+class PreparedBinaryProblem:
+    kernel: np.ndarray
+    labels: np.ndarray
+    eigenvectors: np.ndarray
+    eigenvalue_signs: np.ndarray
+    auxiliary_kernel: np.ndarray
 
-    X_train, y_train, _ = read_ucr_data(os.path.join(data_dir, dataset_name, f'{dataset_name}_TRAIN'))
-    X_test, y_test, _ = read_ucr_data(os.path.join(data_dir, dataset_name, f'{dataset_name}_TEST'))
 
-    return X_train, y_train, X_test, y_test
+@dataclass
+class BinaryKreinModel:
+    classes: tuple
+    train_columns: np.ndarray
+    original_coefficients: np.ndarray
+    intercept: float
 
-def read_ucr_data(filename):
-    '''
-    Loads an UCR data set from a file, returning the samples and the
-    respective labels. Also extracts the data set name such that one
-    may easily display results.
-    '''
+    def decision_function(self, test_kernel: np.ndarray) -> np.ndarray:
+        return (
+            np.asarray(test_kernel, dtype=np.float64)
+            @ self.original_coefficients
+            + self.intercept
+        )
 
-    data = np.loadtxt(filename, delimiter=',')
-    Y = data[:, 0]
-    X = data[:, 1:]
+    def predict(self, test_kernel: np.ndarray) -> np.ndarray:
+        decision = self.decision_function(test_kernel)
+        return np.where(decision > 0.0, self.classes[1], self.classes[0])
 
-    # Remove all potential suffixes to obtain the data set name. This is
-    # somewhat inefficient, but we only have to do it once.
-    name = os.path.basename(filename)
-    name = strip_suffix(name, '_TRAIN')
-    name = strip_suffix(name, '_TEST')
 
-    return X, Y, name
+@dataclass
+class OneVsOneKreinModel:
+    classes: np.ndarray
+    pair_models: list[BinaryKreinModel]
 
-def custom_grid_search_cv(model, param_grid, precomputed_kernels, y, cv=5):
-    # Custom model for an array of precomputed kernels
-    # 1. Stratified K-fold
-    cv = StratifiedKFold(n_splits=cv, shuffle=False)
-    results = []
-    for train_index, test_index in cv.split(precomputed_kernels[0], y):
-        split_results = []
-        params = [] # list of dict, its the same for every split
-        # run over the kernels first
-        for K_idx, K in enumerate(precomputed_kernels):
-            # Run over parameters
-            for p in list(ParameterGrid(param_grid)):
-                sc = _fit_and_score(clone(model), K, y, scorer=make_scorer(accuracy_score),
-                        train=train_index, test=test_index, verbose=0, parameters=p, fit_params=None,)
-                split_results.append(sc['test_scores'])
-                params.append({'K_idx': K_idx, 'params': p})
-        results.append(split_results)
-    # Collect results and average
-    
-    results = np.array(results)
-    
-    fin_results = results.mean(axis=0)
-    # select the best results
-    best_idx = np.argmax(fin_results)
-    # Return the fitted model and the best_parameters
-    ret_model = clone(model).set_params(**params[best_idx]['params'])
-    return ret_model.fit(precomputed_kernels[params[best_idx]['K_idx']], y), params[best_idx]
+    def predict(self, test_kernel: np.ndarray) -> np.ndarray:
+        test_kernel = np.asarray(test_kernel, dtype=np.float64)
+        votes = np.zeros((test_kernel.shape[0], len(self.classes)), dtype=np.int64)
+        class_to_column = {
+            value: index for index, value in enumerate(self.classes.tolist())
+        }
+        for model in self.pair_models:
+            pair_prediction = model.predict(test_kernel[:, model.train_columns])
+            for class_value in model.classes:
+                votes[pair_prediction == class_value, class_to_column[class_value]] += 1
+        # np.argmax resolves voting ties in favor of the first sorted class,
+        # matching libsvm's deterministic one-vs-one behavior.
+        return self.classes[np.argmax(votes, axis=1)]
 
-from numpy.linalg import eigh
 
-def ensure_psd(K, tol=1e-8):
-    # Helper function to remove negative eigenvalues
-    w,v = eigh(K)
-    if (w<-tol).sum() >= 1:
-        neg = np.argwhere(w<-tol)
-        w[neg] = 0
-        Xp = v.dot(np.diag(w)).dot(v.T)
-        return Xp
-    else:
-        return K
+def _validate_training_kernel(kernel: np.ndarray) -> np.ndarray:
+    kernel = np.asarray(kernel, dtype=np.float64)
+    if kernel.ndim != 2 or kernel.shape[0] != kernel.shape[1]:
+        raise ValueError(f"training kernel must be square, got {kernel.shape}")
+    if not np.all(np.isfinite(kernel)):
+        raise ValueError("training kernel contains non-finite entries")
+    asymmetry = float(np.max(np.abs(kernel - kernel.T)))
+    if asymmetry > 1e-8:
+        raise ValueError(
+            f"training kernel is not symmetric (maximum error {asymmetry})"
+        )
+    return 0.5 * (kernel + kernel.T)
 
-def krein_svm_grid_search(K_train: np.ndarray, K_test: np.ndarray,
-        y_train: np.ndarray, y_test: np.ndarray,
-        param_grid: dict={'C': np.logspace(-3, 5, num=9)},
-        gammas: np.ndarray=np.logspace(-4,1,num=6)):
 
-    logger = logging.getLogger()
-    logger.info('Starting analysis')
+def prepare_binary_problem(
+    kernel: np.ndarray, signed_labels: np.ndarray
+) -> PreparedBinaryProblem:
+    """Construct the positive-semidefinite auxiliary problem in Algorithm 1."""
 
-    kernel_matrices_train = []
-    kernel_matrices_test = []
-    kernel_params = []
-    for g in gammas:
-        M_train = np.exp(-g*K_train)
-        M_test = np.exp(-g*K_test)
-        # Add psd-ensuring conditions
-        M_train = ensure_psd(M_train)
+    kernel = _validate_training_kernel(kernel)
+    labels = np.asarray(signed_labels, dtype=np.float64)
+    if kernel.shape[0] != len(labels):
+        raise ValueError("kernel and labels have inconsistent sizes")
+    if set(np.unique(labels).tolist()) != {-1.0, 1.0}:
+        raise ValueError("binary labels must be encoded as -1 and +1")
 
-        kernel_matrices_train.append(M_train)
-        kernel_matrices_test.append(M_test)
-        kernel_params.append(g)
+    weighted_gram = labels[:, None] * kernel * labels[None, :]
+    eigenvalues, eigenvectors = np.linalg.eigh(weighted_gram)
 
-    svm = SVC(kernel='precomputed', max_iter=2000)
+    # Algorithm 1 specifies S = sign(D).  In particular, do not clip negative
+    # eigenvalues or truncate small nonzero modes: either change breaks the
+    # exact map from the auxiliary solution back to the original kernel.
+    signs = np.sign(eigenvalues)
+    absolute_gram = (eigenvectors * np.abs(eigenvalues)) @ eigenvectors.T
+    auxiliary_kernel = labels[:, None] * absolute_gram * labels[None, :]
+    auxiliary_kernel = 0.5 * (auxiliary_kernel + auxiliary_kernel.T)
+    return PreparedBinaryProblem(
+        kernel=kernel,
+        labels=labels,
+        eigenvectors=eigenvectors,
+        eigenvalue_signs=signs,
+        auxiliary_kernel=auxiliary_kernel,
+    )
 
-    # Gridsearch
-    gs, best_params = custom_grid_search_cv(svm, param_grid, kernel_matrices_train, y_train, cv=5)
-    # Store best params
-    gamma = kernel_params[best_params['K_idx']]
-    C = best_params['params']['C']
-    print(f"Best C: {C}")
-    print(f"Best gamma: {gamma}")
 
-    y_pred = gs.predict(kernel_matrices_test[best_params['K_idx']])
-    accuracy = accuracy_score(y_test, y_pred)
+def fit_prepared_binary(
+    prepared: PreparedBinaryProblem,
+    c_value: float,
+    *,
+    classes: tuple = (-1, 1),
+    train_columns: np.ndarray | None = None,
+) -> BinaryKreinModel:
+    """Solve the auxiliary SVM and map its dual solution back to Krein space."""
 
-    logger.info('Accuracy = {:2.2f}'.format(accuracy * 100))
+    svc = SVC(kernel="precomputed", C=float(c_value), max_iter=-1)
+    svc.fit(prepared.auxiliary_kernel, prepared.labels)
 
-    return gs, accuracy
+    # sklearn stores y_i * alpha_tilde_i for support vectors.
+    alpha_tilde = np.zeros(len(prepared.labels), dtype=np.float64)
+    alpha_tilde[svc.support_] = (
+        svc.dual_coef_[0] * prepared.labels[svc.support_]
+    )
+    alpha = (
+        prepared.eigenvectors * prepared.eigenvalue_signs
+    ) @ (prepared.eigenvectors.T @ alpha_tilde)
+    original_coefficients = prepared.labels * alpha
+    intercept = float(svc.intercept_[0])
+
+    # Verify the identity that distinguishes Algorithm 1 from clipping:
+    # predictions mapped back to K must equal the auxiliary SVM predictions.
+    auxiliary_decision = (
+        prepared.auxiliary_kernel @ (prepared.labels * alpha_tilde) + intercept
+    )
+    original_decision = prepared.kernel @ original_coefficients + intercept
+    maximum_error = float(np.max(np.abs(original_decision - auxiliary_decision)))
+    if maximum_error > 1e-6:
+        raise RuntimeError(
+            "Loosli KSVM map-back consistency check failed "
+            f"(maximum decision error {maximum_error})"
+        )
+
+    if train_columns is None:
+        train_columns = np.arange(len(prepared.labels), dtype=np.int64)
+    return BinaryKreinModel(
+        classes=classes,
+        train_columns=np.asarray(train_columns, dtype=np.int64),
+        original_coefficients=original_coefficients,
+        intercept=intercept,
+    )
+
+
+def prepare_one_vs_one(
+    kernel: np.ndarray, labels: np.ndarray
+) -> list[tuple[PreparedBinaryProblem, tuple, np.ndarray]]:
+    """Prepare every binary subproblem used for multiclass classification."""
+
+    kernel = _validate_training_kernel(kernel)
+    labels = np.asarray(labels)
+    classes = np.unique(labels)
+    if len(classes) < 2:
+        raise ValueError("at least two classes are required")
+
+    prepared_pairs = []
+    for class_a, class_b in combinations(classes.tolist(), 2):
+        columns = np.flatnonzero((labels == class_a) | (labels == class_b))
+        signed = np.where(labels[columns] == class_b, 1.0, -1.0)
+        pair_kernel = kernel[np.ix_(columns, columns)]
+        prepared_pairs.append(
+            (prepare_binary_problem(pair_kernel, signed),
+             (class_a, class_b), columns)
+        )
+    return prepared_pairs
+
+
+def fit_prepared_one_vs_one(
+    prepared_pairs: list[tuple[PreparedBinaryProblem, tuple, np.ndarray]],
+    labels: np.ndarray,
+    c_value: float,
+) -> OneVsOneKreinModel:
+    pair_models = [
+        fit_prepared_binary(
+            problem, c_value, classes=classes, train_columns=columns
+        )
+        for problem, classes, columns in prepared_pairs
+    ]
+    return OneVsOneKreinModel(classes=np.unique(labels), pair_models=pair_models)
+
+
+def fit_loosli_ksvm(
+    kernel: np.ndarray, labels: np.ndarray, c_value: float
+) -> OneVsOneKreinModel:
+    """Fit Algorithm 1 to a precomputed kernel matrix."""
+
+    return fit_prepared_one_vs_one(
+        prepare_one_vs_one(kernel, labels), labels, c_value
+    )
+
 
 class KreinSVC(BaseEstimator, ClassifierMixin):
-    '''
-    An SVC which ensures positive definiteness before training.
-    It also computes the kernel matrix from the given distance matrix:
-        K = np.exp(-self.psd_gamma*D_matrix)
-    '''
-    def __init__(self, C=1.0, kernel='precomputed', degree=3, gamma='auto_deprecated',
-             coef0=0.0, shrinking=True, probability=False,
-             tol=1e-3, cache_size=200, class_weight=None,
-             verbose=False, max_iter=-1, decision_function_shape='ovr',
-             random_state=None, psd_tol=1e-8, psd_gamma=1.0):
+    """KSVM estimator for a precomputed distance matrix.
+
+    ``fit`` expects a square training distance matrix and ``predict`` expects
+    test-to-training distances.  Both are converted to ``exp(-gamma * D)``.
+    """
+
+    def __init__(self, C=1.0, gamma=1.0):
         self.C = C
-        self.kernel = kernel
-        self.shrinking = shrinking
-        self.probability = probability
-        self.verbose = verbose
-        self.cache_size = cache_size
-        self.class_weight = class_weight
-        self.max_iter = max_iter
-        self.decision_function_shape = decision_function_shape
-        self.random_state = random_state
-        self.psd_tol = psd_tol
-        self.psd_gamma = psd_gamma
+        self.gamma = gamma
 
-        self.svc = SVC(C=C, kernel=kernel, degree=degree, gamma=gamma,
-             coef0=coef0, shrinking=shrinking, probability=probability,
-             tol=tol, cache_size=cache_size, class_weight=class_weight,
-             verbose=verbose, max_iter=max_iter, decision_function_shape=decision_function_shape,
-             random_state=random_state)
-
-    def get_params():
-        return {
-            'C': self.C,
-            'kernel': self.kernel,
-            'shrinking': self.shrinking,
-            'probability': self.probability,
-            'verbose': self.verbose,
-            'cache_size': self.cache_size,
-            'class_weight': self.class_weight,
-            'max_iter': self.max_iter,
-            'decision_function_shape': self.decision_function_shape,
-            'random_state': self.random_state,
-            'psd_tol': self.psd_tol,
-            'psd_gamma': self.psd_gamma
-        }
-
-    def set_params(self, **parameters):
-        for parameter, value in parameters.items():
-            setattr(self, parameter, value)
+    def fit(self, X, y):
+        distance = np.asarray(X, dtype=np.float64)
+        kernel = np.exp(-float(self.gamma) * distance)
+        self.model_ = fit_loosli_ksvm(kernel, np.asarray(y), float(self.C))
+        self.classes_ = self.model_.classes
         return self
 
-    def fit(self, X, y, sample_weight=None):
-        '''
-        Args:
-            X (np.ndarray): Distance_matrix
-        '''
-        M_train = np.exp(-self.psd_gamma*X)
-        K = ensure_psd(M_train, tol=self.psd_tol)
-        self.svc.fit(K, y, sample_weight)
-
     def predict(self, X):
-        M_test = np.exp(-self.psd_gamma*X)
-        return self.svc.predict(M_test)
+        if not hasattr(self, "model_"):
+            raise RuntimeError("KreinSVC must be fitted before prediction")
+        kernel = np.exp(-float(self.gamma) * np.asarray(X, dtype=np.float64))
+        return self.model_.predict(kernel)
 
-    def predict_proba(self, X):
-        return self.svc.predict_proba(X)
+
+def _choose_parameters(
+    distance: np.ndarray,
+    labels: np.ndarray,
+    gammas: np.ndarray,
+    c_values: np.ndarray,
+    cv: int,
+) -> tuple[float, float]:
+    splitter = StratifiedKFold(n_splits=cv, shuffle=False)
+    scores = np.zeros((len(gammas), len(c_values)), dtype=np.float64)
+    for train, validation in splitter.split(distance, labels):
+        distance_train = distance[np.ix_(train, train)]
+        distance_validation = distance[np.ix_(validation, train)]
+        y_train = labels[train]
+        y_validation = labels[validation]
+        for gamma_index, gamma in enumerate(gammas):
+            train_kernel = np.exp(-gamma * distance_train)
+            validation_kernel = np.exp(-gamma * distance_validation)
+            prepared = prepare_one_vs_one(train_kernel, y_train)
+            for c_index, c_value in enumerate(c_values):
+                model = fit_prepared_one_vs_one(prepared, y_train, c_value)
+                scores[gamma_index, c_index] += accuracy_score(
+                    y_validation, model.predict(validation_kernel)
+                )
+    scores /= cv
+    gamma_index, c_index = np.unravel_index(
+        int(np.argmax(scores)), scores.shape
+    )
+    return float(gammas[gamma_index]), float(c_values[c_index])
+
+
+def krein_svm_grid_search(
+    D_train: np.ndarray,
+    D_test: np.ndarray,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+    param_grid: dict | None = None,
+    gammas: np.ndarray | None = None,
+    cv: int = 10,
+):
+    """Select C and gamma by nested CV, then evaluate the Loosli KSVM.
+
+    The default grid is the one reported in the paper: both C and gamma range
+    over 10^-3, ..., 10^3.  The return shape matches the historical WTK helper.
+    """
+
+    distance_train = np.asarray(D_train, dtype=np.float64)
+    distance_test = np.asarray(D_test, dtype=np.float64)
+    labels_train = np.asarray(y_train)
+    labels_test = np.asarray(y_test)
+    if param_grid is None:
+        c_values = PAPER_GRID
+    else:
+        c_values = np.asarray(param_grid.get("C", PAPER_GRID), dtype=np.float64)
+    if gammas is None:
+        gammas = PAPER_GRID
+    else:
+        gammas = np.asarray(gammas, dtype=np.float64)
+
+    gamma, c_value = _choose_parameters(
+        distance_train, labels_train, gammas, c_values, cv
+    )
+    model = KreinSVC(C=c_value, gamma=gamma).fit(
+        distance_train, labels_train
+    )
+    prediction = model.predict(distance_test)
+    model.best_params_ = {"C": c_value, "gamma": gamma}
+    return model, float(accuracy_score(labels_test, prediction))
